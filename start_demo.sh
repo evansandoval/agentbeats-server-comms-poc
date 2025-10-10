@@ -29,21 +29,32 @@ print_header() {
     echo -e "${BLUE}========================================${NC}"
 }
 
+# Load .env file if it exists
+if [ -f .env ]; then
+    print_status "Loading environment from .env file..."
+    export $(grep -v '^#' .env | xargs)
+fi
+
 # Check environment
 if [ -z "$OPENAI_API_KEY" ]; then
     print_error "OPENAI_API_KEY not set!"
-    echo "Please set your OpenAI API key:"
+    echo "Please set your OpenAI API key in .env file or:"
     echo "  export OPENAI_API_KEY='your-key-here'"
     exit 1
 fi
 
 print_header "AgentBeats Demo - Starting Components"
 
+# Show Python version being used
+print_status "Python version: $(python --version)"
+print_status "Python path: $(which python)"
+
 # Create logs directory
 mkdir -p logs
 
 # Start Green Agent
 print_status "Starting Green Agent on port 9031..."
+# Use python -m agentbeats (now that old script is removed)
 python -m agentbeats run green_agent_card.toml \
   --launcher_host 0.0.0.0 --launcher_port 9030 \
   --agent_host 0.0.0.0 --agent_port 9031 \
@@ -54,11 +65,11 @@ GREEN_PID=$!
 print_status "Green Agent started (PID: $GREEN_PID)"
 
 # Wait for green agent to be ready
-sleep 5
+sleep 8
 
 # Start Local Red Agent (with auto-proxy)
 print_status "Starting Local Red Agent with auto-proxy on port 9021..."
-python simple_local_agent.py > logs/red_agent.log 2>&1 &
+$(which python) simple_local_agent.py > logs/red_agent.log 2>&1 &
 RED_PID=$!
 print_status "Local Red Agent started (PID: $RED_PID)"
 

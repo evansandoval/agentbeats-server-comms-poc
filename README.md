@@ -1,16 +1,132 @@
-# Quick Start: Single-Command Agent Deployment
+# AgentBeats Local Agent Proxy - PoC
 
-This guide shows the **improved user experience** where you run a single command to start your local agent with automatic proxy handling.
+This proof of concept enables **local (offline) agents** to communicate with deployed AgentBeats agents via the A2A (Agent-to-Agent) protocol.
 
-## For Users: Running a Local Agent
+## Quick Commands
 
-### Step 1: Create Your Agent Card
+```bash
+# Start local agent (Terminal 1)
+python simple_local_agent.py
 
-Create a TOML file describing your agent (e.g., `my_agent_card.toml`):
+# Run test (Terminal 2)
+python test_red_agent_only.py
+
+# Check for zombie processes
+ps aux | grep -E "(agentbeats|simple_local_agent)" | grep -v grep
+lsof -i :9021 -i :9031
+
+# Kill zombies
+pkill -9 -f "agentbeats run"
+pkill -9 -f "simple_local_agent"
+```
+
+📖 **For detailed terminal-based testing guide, see [TERMINAL_TESTING.md](TERMINAL_TESTING.md)**
+📊 **For current system status, see [CURRENT_STATUS.md](CURRENT_STATUS.md)**
+
+## What This PoC Demonstrates
+
+✅ **Working:**
+- Local agent with auto-starting proxy server
+- A2A protocol communication (streaming responses)
+- Message polling and response submission
+- Battle ID extraction and task completion
+
+🚧 **TODO:**
+- Green agent integration (requires AgentBeats backend)
+- Full battle orchestration flow
+- WebSocket support (currently uses polling)
+- Authentication/authorization
+- Error handling and retries
+- Production deployment
+
+## Architecture
+
+```
+[Any A2A Agent]
+      │
+      │ A2A Protocol (HTTP/JSON)
+      │ POST /tasks with streaming response
+      ▼
+┌─────────────────┐       ┌──────────────────┐
+│  Red Agent      │◄──────┤  Local Red       │
+│  Proxy          │ HTTP  │  Agent           │
+│  (localhost:    │──────►│  (Python)        │
+│   9021)         │       └──────────────────┘
+└─────────────────┘
+    │
+    │ Implements:
+    │ 1. A2A Server (/.well-known/agent.json, /tasks)
+    │ 2. Launcher Interface (/reset)
+    │ 3. Local Communication (/poll_messages, /submit_response)
+    │
+```
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- AgentBeats: `pip install agentbeats`
+- OpenAI API key (only needed for green agent)
+
+### 1. Run the Local Agent (Auto-Proxy)
+
+```bash
+python simple_local_agent.py
+```
+
+This single command:
+- ✅ Starts the proxy server on port 9021
+- ✅ Starts the local agent
+- ✅ Loads the agent card
+- ✅ Begins polling for messages
+
+### 2. Test the Communication
+
+```bash
+python test_red_agent_only.py
+```
+
+This sends a test A2A message and verifies the complete flow works.
+
+## File Structure
+
+```
+.
+├── red_agent_card.toml       # Agent configuration
+├── red_agent_proxy.py        # A2A ↔ local agent bridge
+├── proxy_wrapper.py          # Auto-proxy management
+├── simple_local_agent.py     # Example local agent (WORKING)
+├── example_custom_agent.py   # Template for new agents
+├── test_red_agent_only.py    # Test script
+│
+├── green_agent_card.toml     # TODO: needs backend integration
+├── green_tools.py            # TODO: needs backend integration
+├── start_demo.sh             # TODO: green agent startup incomplete
+├── stop_demo.sh              # Utility to stop all processes
+├── trigger_battle.py         # TODO: needs /tasks endpoint fix
+│
+├── README.md                 # Main documentation
+├── TERMINAL_TESTING.md       # Terminal-based testing guide (recommended)
+├── CURRENT_STATUS.md         # Current system status & running processes
+├── DEMO_GUIDE.md             # Quick 5-minute demo
+├── TODO.md                   # Detailed task tracking
+│
+├── .env                      # API keys (gitignored)
+├── .env.example              # API key template
+├── .gitignore
+└── requirements.txt          # Python dependencies
+```
+
+## Creating Your Own Local Agent
+
+### Step 1: Create Agent Card
+
+Create `my_agent_card.toml`:
 
 ```toml
-name = "My Awesome Agent"
-description = "Does cool stuff"
+name = "My Agent"
+description = "What my agent does"
 url = "http://localhost:9025/"
 host = "0.0.0.0"
 port = 9025
@@ -24,15 +140,16 @@ streaming = true
 [[skills]]
 id = "my_skill"
 name = "My Skill"
-description = "What my agent does"
+description = "What my agent can do"
 tags = ["custom"]
-examples = ["Example usage"]
+examples = ["Example task"]
 ```
 
-### Step 2: Create Your Agent Code
+### Step 2: Create Agent Code
+
+Create `my_agent.py`:
 
 ```python
-# my_agent.py
 import time
 import requests
 from proxy_wrapper import run_with_proxy
@@ -52,16 +169,13 @@ class MyAgent:
         )
 
     def run(self):
-        """Your agent logic here"""
         while True:
-            messages = self.poll_messages()
-            for msg in messages:
-                # Process message
+            for msg in self.poll_messages():
+                # Your logic here!
                 response = f"Processed: {msg}"
                 self.submit_response(response)
             time.sleep(1)
 
-# Single command to run everything!
 if __name__ == "__main__":
     agent = MyAgent()
     run_with_proxy(
@@ -71,56 +185,136 @@ if __name__ == "__main__":
     )
 ```
 
-### Step 3: Run Your Agent
+### Step 3: Run It
 
 ```bash
 python my_agent.py
 ```
 
-**That's it!** The proxy starts automatically in the background.
+That's it! Your agent is now A2A-compatible.
 
-## What Happens Behind the Scenes
+## How It Works
 
-When you call `run_with_proxy()`:
+### 1. Proxy Server (`red_agent_proxy.py`)
 
-1. ✅ Proxy server starts automatically on specified port
-2. ✅ Agent card is loaded and served at `/.well-known/agent.json`
-3. ✅ A2A endpoints (`/tasks`, `/reset`) are ready
-4. ✅ Your agent's `run()` method is called
-5. ✅ Green agent can now communicate via A2A protocol
-6. ✅ Your agent polls `/poll_messages` and submits via `/submit_response`
+Implements three interfaces:
 
-## Examples
+**A2A Server Interface:**
+- `GET /.well-known/agent.json` - Serves agent card
+- `POST /tasks` - Receives A2A messages, returns streaming responses
 
-### Example 1: Using the Pre-built Red Agent
+**Launcher Interface:** (for AgentBeats backend)
+- `POST /reset` - Receives battle context
+- Notifies backend when ready
 
+**Local Agent Interface:**
+- `GET /poll_messages` - Local agent polls for new messages
+- `POST /submit_response` - Local agent submits responses
+
+### 2. Auto-Proxy Wrapper (`proxy_wrapper.py`)
+
+The `run_with_proxy()` function:
+1. Loads your agent card
+2. Starts proxy server in background thread
+3. Calls your agent's `run()` method
+
+### 3. Message Flow
+
+```
+1. A2A message arrives at proxy: POST /tasks
+2. Proxy queues message internally
+3. Local agent polls: GET /poll_messages
+4. Local agent processes message
+5. Local agent submits response: POST /submit_response
+6. Proxy streams response back to caller in A2A format
+```
+
+## Testing
+
+### Terminal-Based Testing (Recommended)
+
+Using separate terminals gives you better process control and makes it easier to stop components.
+
+#### Step 1: Check for Orphaned Processes
+
+Before starting, clean up any zombie processes:
+
+```bash
+# Check for running agent processes
+ps aux | grep -E "(agentbeats|simple_local_agent|red_agent_proxy)"
+
+# Check specific ports
+lsof -i :9021 -i :9031
+
+# Kill zombie processes if found
+pkill -9 -f "agentbeats run"
+pkill -9 -f "simple_local_agent"
+```
+
+#### Step 2: Terminal Layout
+
+Open 3 terminals:
+
+**Terminal 1 - Local Red Agent:**
 ```bash
 python simple_local_agent.py
 ```
 
-This runs the example red agent with auto-proxy.
-
-### Example 2: Custom Agent
-
-```bash
-python example_custom_agent.py
+Expected output:
+```
+INFO: Starting proxy server on 0.0.0.0:9021
+INFO: Loaded agent card: POC Red Agent (via Proxy)
+INFO: Proxy server started successfully
+INFO: Red agent started!
+INFO: Polling for messages...
 ```
 
-Shows how to create a custom agent from scratch.
+**Terminal 2 - Test Script:**
+```bash
+python test_red_agent_only.py
+```
 
-### Example 3: Your Own Agent
+Expected output:
+```
+✓ Red agent proxy is ready
+✓ Sending test message...
+[STATUS] Task state: running
+[MESSAGE] Red agent completed task for battle test_battle_XXX...
+[STATUS] Task state: completed
+✓ Test completed successfully!
+```
 
-See `example_custom_agent.py` for a full template you can copy and modify.
+**Terminal 3 - Logs (Optional):**
+```bash
+tail -f logs/red_agent.log
+```
 
-## User Requirements
+You'll see:
+- Proxy startup
+- Agent polling
+- Message received and processed
+- Response submitted
 
-Minimal! Users only need to:
+#### Step 3: Stop Everything
 
-1. ✅ Implement a class with `__init__(proxy_url)` and `run()` methods
-2. ✅ Create an agent card TOML file
-3. ✅ Call `run_with_proxy(agent, agent_card_path="...", proxy_port=...)`
+Just press `Ctrl+C` in each terminal. Much easier than hunting down PIDs!
 
-**No manual proxy management needed!**
+### Automated Testing (Alternative)
+
+If you prefer scripts:
+
+```bash
+# Start everything
+./start_demo.sh
+
+# Run test
+python test_red_agent_only.py
+
+# Stop everything
+./stop_demo.sh
+```
+
+**Note:** The automated approach can leave zombie processes. Use `ps aux | grep agent` to verify cleanup.
 
 ## API Reference
 
@@ -129,120 +323,144 @@ Minimal! Users only need to:
 Runs a local agent with automatic proxy startup.
 
 **Parameters:**
-- `agent`: Your agent instance (must have a `run()` method)
-- `agent_card_path`: Path to your agent card TOML file
-- `proxy_host`: Host for proxy server (default: `"0.0.0.0"`)
-- `proxy_port`: Port for proxy server (default: `9021`)
+- `agent` - Your agent instance (must have `run()` method)
+- `agent_card_path` - Path to TOML agent card
+- `proxy_host` - Proxy bind address (default: `"0.0.0.0"`)
+- `proxy_port` - Proxy port (default: `9021`)
 
 **Example:**
 ```python
 agent = MyAgent()
-run_with_proxy(agent, agent_card_path="my_card.toml", proxy_port=9025)
+run_with_proxy(agent, "my_card.toml", proxy_port=9025)
 ```
 
 ### Agent Class Requirements
 
-Your agent class must implement:
-
 ```python
 class MyAgent:
-    def __init__(self, proxy_url: str = "http://localhost:PORT"):
-        """Initialize with proxy URL"""
+    def __init__(self, proxy_url: str):
+        """Must accept proxy_url parameter"""
         self.proxy_url = proxy_url
 
     def run(self):
-        """Main agent loop - called by run_with_proxy()"""
-        # Your logic here
+        """Main loop - called by run_with_proxy()"""
         pass
 ```
 
-### Proxy Communication Endpoints
+### Proxy Endpoints
 
-Your agent communicates with the proxy via:
-
-**Poll for messages:**
+**For local agents:**
 ```python
+# Poll for messages
 GET {proxy_url}/poll_messages
 Returns: {"messages": [...]}
-```
 
-**Submit response:**
-```python
+# Submit response
 POST {proxy_url}/submit_response
-Body: {"response": "your response text"}
+Body: {"response": "your text"}
 ```
 
-## Testing Your Setup
+**For A2A agents:**
+```python
+# Get agent card
+GET {proxy_url}/.well-known/agent.json
 
-1. **Start your local agent:**
+# Send message
+POST {proxy_url}/tasks
+Body: {"task_id": "...", "message": {...}}
+Returns: Streaming NDJSON response
+```
+
+## Known Issues & TODOs
+
+### High Priority
+
+- [ ] **Green agent `/tasks` endpoint** - Currently returns 404
+  - AgentBeats agents use different routing than standard A2A
+  - Need to integrate with AgentBeats backend or update trigger script
+
+- [ ] **Error handling** - No retry logic or timeout handling
+  - Add exponential backoff for polling
+  - Handle proxy crashes gracefully
+
+- [ ] **WebSocket support** - Currently uses polling (1 second interval)
+  - Replace HTTP polling with WebSocket for real-time communication
+  - More efficient for high-frequency messages
+
+### Medium Priority
+
+- [ ] **Authentication** - No security currently
+  - Add OAuth/JWT for A2A messages
+  - Secure local agent ↔ proxy communication
+
+- [ ] **Battle orchestration** - Green agent needs backend
+  - Set up AgentBeats backend server
+  - Register agents properly
+  - Implement full battle flow
+
+- [ ] **Multiple agent support** - Only one local agent at a time
+  - Support multiple local agents with different ports
+  - Dynamic port allocation
+
+### Low Priority
+
+- [ ] **Logging improvements** - Better structured logging
+- [ ] **Metrics/monitoring** - Track message latency, success rates
+- [ ] **Deployment guide** - Docker, cloud deployment instructions
+- [ ] **Agent discovery** - Auto-register with backend
+
+## Troubleshooting
+
+### Proxy won't start
+
+```bash
+# Check if port is in use
+lsof -i :9021
+
+# Kill process using port
+kill -9 <PID>
+```
+
+### Agent not receiving messages
+
+1. Check proxy is running:
    ```bash
-   python my_agent.py
+   curl http://localhost:9021/.well-known/agent.json
    ```
 
-2. **Verify proxy is running:**
+2. Check agent is polling:
    ```bash
-   curl http://localhost:9025/.well-known/agent.json
+   tail -f logs/red_agent.log | grep "poll_messages"
    ```
 
-3. **Send a test message:**
+3. Send test message:
    ```bash
-   curl -X POST http://localhost:9025/tasks \
-     -H "Content-Type: application/json" \
-     -d '{"task_id": "test", "message": {"parts": [{"type": "text", "text": "Hello!"}]}}'
+   python test_red_agent_only.py
    ```
 
-4. **Check your agent logs** - you should see the message being processed!
+### Port conflicts
 
-## Running the Full Demo
+Change port in:
+- Agent card TOML file (`port =`)
+- Agent initialization (`proxy_url="http://localhost:PORT"`)
+- `run_with_proxy()` call (`proxy_port=PORT`)
 
-To test the complete green agent ↔ red agent communication:
+## Contributing
 
-### Step 1: Set your OpenAI API key
+This is a proof of concept. Known limitations:
+- Polling instead of WebSocket
+- No authentication
+- Minimal error handling
+- Green agent integration incomplete
 
-```bash
-export OPENAI_API_KEY='your-key-here'
-```
+Pull requests welcome for TODOs listed above!
 
-### Step 2: Start all components
+## References
 
-```bash
-./start_demo.sh
-```
+- [AgentBeats GitHub](https://github.com/agentbeats/agentbeats)
+- [A2A Protocol](https://a2a-protocol.org/)
+- [A2A Specification](https://github.com/a2aproject/A2A)
 
-This starts:
-- Green agent on port 9031 (orchestrator)
-- Red agent proxy on port 9021 (auto-started with local agent)
+## License
 
-### Step 3: Trigger a battle
-
-```bash
-./trigger_battle.py
-```
-
-This sends a message to the green agent, which will:
-1. Log the battle start
-2. Send a message to the red agent
-3. Receive and log the red agent's response
-4. Report the battle end
-
-### Step 4: Stop all components
-
-```bash
-./stop_demo.sh
-```
-
-Or use Ctrl+C and the PIDs shown in the output.
-
-### View Logs
-
-```bash
-tail -f logs/green_agent.log   # Green agent activity
-tail -f logs/red_agent.log      # Red agent activity
-```
-
-## Next Steps
-
-- Modify `process_message()` in your agent to add custom logic
-- Add error handling and retry logic
-- Deploy to production by changing URLs/ports
-- Create multiple local agents with different ports
+MIT (or match AgentBeats license)
