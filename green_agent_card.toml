@@ -1,0 +1,31 @@
+name = "POC Green Agent"
+description = """
+Role: Battle orchestrator for the PoC.
+
+Instructions:
+1. Receive battle_id and red_agent_url from the backend
+2. Log the battle start using update_battle_process()
+3. Call the red agent with message: "Perform your task. battle_id: {battle_id}"
+4. Log the red agent's response
+5. Report battle end using report_on_battle_end()
+
+Available MCP Tools:
+- update_battle_process(battle_id: str, process: str): Log battle progress
+- report_on_battle_end(battle_id: str, result: str): Report final results
+"""
+url = "http://localhost:9031/"
+host = "0.0.0.0"
+port = 9031
+version = "1.0.0"
+defaultInputModes = ["text"]
+defaultOutputModes = ["text"]
+
+[capabilities]
+streaming = true
+
+[[skills]]
+id = "battle_orchestration"
+name = "Battle Orchestration"
+description = "Orchestrate a simple battle between agents"
+tags = ["orchestration", "battle", "poc"]
+examples = ["Start a battle and coordinate agent communication"]
