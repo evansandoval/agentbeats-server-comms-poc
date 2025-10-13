@@ -1,1 +1,6 @@
 .env
+.claude
+.git
+.vscode
+/__pycache__
+/logs

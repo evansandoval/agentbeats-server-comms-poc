@@ -21,45 +21,83 @@ pkill -9 -f "simple_local_agent"
 ```
 
 📖 **For detailed terminal-based testing guide, see [TERMINAL_TESTING.md](TERMINAL_TESTING.md)**
-📊 **For current system status, see [CURRENT_STATUS.md](CURRENT_STATUS.md)**
 
-## What This PoC Demonstrates
+## Current Status
 
-✅ **Working:**
-- Local agent with auto-starting proxy server
-- A2A protocol communication (streaming responses)
-- Message polling and response submission
-- Battle ID extraction and task completion
+**Last Updated:** 2025-10-12
 
-🚧 **TODO:**
-- Green agent integration (requires AgentBeats backend)
-- Full battle orchestration flow
-- WebSocket support (currently uses polling)
+### What's Working ✅
+
+1. **Red Agent with Clean Developer UX**
+   - Auto-starting proxy on port 9021
+   - Framework (`AgentRunner`) handles all infrastructure
+   - Agents only contain business logic (`AgentBase`)
+   - A2A protocol compliance
+   - Test script works: `python test_red_agent_only.py`
+
+2. **Green Agent A2A Communication**
+   - Running on port 9031
+   - Has `talk_to_agent()` tool for A2A calls to other agents
+   - Can orchestrate battles via LLM reasoning
+   - Using gpt-4o-mini model
+
+3. **Developer Experience**
+   - Clean agent API - just implement `process_message()`
+   - No proxy URLs, HTTP requests, or polling loops in agent code
+   - Framework abstracts all infrastructure
+
+### What Needs Testing 🚧
+
+- Full green→red battle flow via `trigger_battle.py`
+- End-to-end A2A communication with LLM orchestration
+
+### TODO
+
+- WebSocket support (currently uses polling at 3s intervals)
+- Error handling and retry logic
 - Authentication/authorization
-- Error handling and retries
-- Production deployment
+- Production deployment guide
 
 ## Architecture
 
 ```
-[Any A2A Agent]
-      │
-      │ A2A Protocol (HTTP/JSON)
-      │ POST /tasks with streaming response
-      ▼
-┌─────────────────┐       ┌──────────────────┐
-│  Red Agent      │◄──────┤  Local Red       │
-│  Proxy          │ HTTP  │  Agent           │
-│  (localhost:    │──────►│  (Python)        │
-│   9021)         │       └──────────────────┘
-└─────────────────┘
-    │
-    │ Implements:
-    │ 1. A2A Server (/.well-known/agent.json, /tasks)
-    │ 2. Launcher Interface (/reset)
-    │ 3. Local Communication (/poll_messages, /submit_response)
-    │
+┌─────────────────────────────────────────────────────────────┐
+│                    Green Agent (LLM)                        │
+│  - Battle orchestrator                                      │
+│  - Has talk_to_agent(message, agent_url) tool             │
+│  - Makes outbound A2A calls to red agent                   │
+└─────────────────────────────────────────────────────────────┘
+                         │
+                         │ A2A Protocol (POST /tasks)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Red Agent Proxy                           │
+│  - A2A Server (/.well-known/agent.json, /tasks)           │
+│  - Receives inbound A2A messages                           │
+│  - Queues messages for local agent                         │
+│  - Streams responses back in A2A format                    │
+└─────────────────────────────────────────────────────────────┘
+                         │
+                         │ Internal (hidden from developers)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                Framework (AgentRunner)                      │
+│  - Polls proxy for messages                                │
+│  - Calls agent.process_message()                           │
+│  - Submits responses to proxy                              │
+└─────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Local Red Agent (Your Code!)                   │
+│  - Inherits from AgentBase                                 │
+│  - Implements process_message() ONLY                       │
+│  - Pure business logic - no infrastructure!                │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+**Key Innovation:** Agent developers only write business logic. All infrastructure
+(proxy communication, HTTP requests, A2A protocol, polling) is abstracted away.
 
 ## Quick Start
 
@@ -69,8 +107,9 @@ pkill -9 -f "simple_local_agent"
 - AgentBeats: `pip install agentbeats`
 - OpenAI API key (only needed for green agent)
 
-### 1. Run the Local Agent (Auto-Proxy)
+### Option A: Quick Test (Red Agent Only)
 
+**Terminal 1 - Start Red Agent:**
 ```bash
 python simple_local_agent.py
 ```
@@ -79,36 +118,75 @@ This single command:
 - ✅ Starts the proxy server on port 9021
 - ✅ Starts the local agent
 - ✅ Loads the agent card
-- ✅ Begins polling for messages
+- ✅ Framework begins polling for messages
 
-### 2. Test the Communication
-
+**Terminal 2 - Test Direct A2A Communication:**
 ```bash
 python test_red_agent_only.py
 ```
 
-This sends a test A2A message and verifies the complete flow works.
+This sends a test A2A message directly to the red agent and verifies the flow works.
+
+### Option B: Full Green-Red Battle (Two Agent Setup)
+
+**Terminal 1 - Start Green Agent (Orchestrator):**
+```bash
+# Load environment variables (for OpenAI API key)
+source .env
+
+# Start green agent on port 9031
+python -m agentbeats run green_agent_card.toml   --launcher_host 0.0.0.0 --launcher_port 9030   --agent_host 0.0.0.0 --agent_port 9031   --model_type openai --model_name gpt-4o-mini   --tool green_tools.py 2>&1 | tee logs/green_output.txt
+```
+
+Expected output:
+```
+INFO: Green agent starting on port 9031
+INFO: Loaded tools: talk_to_agent, evaluate_battle, generate_test_data
+```
+
+**Terminal 2 - Start Red Agent:**
+```bash
+python simple_local_agent.py 2>&1 | tee logs/red_output.txt
+```
+
+Expected output:
+```
+INFO: Starting proxy server on 0.0.0.0:9021
+INFO: Loaded agent card: POC Red Agent (via Proxy)
+INFO: Proxy server started successfully
+INFO: AgentRunner initialized for SimpleRedAgent
+```
+
+**Terminal 3 - Trigger Battle:**
+```bash
+python trigger_battle.py 2>&1 | tee logs/launcher_output.txt
+```
+
+This triggers the green agent to use `talk_to_agent()` tool to send an A2A message to the red agent, demonstrating the full orchestration flow.
 
 ## File Structure
 
 ```
 .
-├── red_agent_card.toml       # Agent configuration
+├── agent_base.py             # Abstract base class for agents (NEW!)
+├── agent_runner.py           # Framework agent loop (NEW!)
+├── proxy_wrapper.py          # Auto-proxy management + ProxyClient
 ├── red_agent_proxy.py        # A2A ↔ local agent bridge
-├── proxy_wrapper.py          # Auto-proxy management
-├── simple_local_agent.py     # Example local agent (WORKING)
-├── example_custom_agent.py   # Template for new agents
+│
+├── simple_local_agent.py     # Example red agent (REFACTORED)
+├── example_custom_agent.py   # Template for new agents (UPDATED)
+├── red_agent_card.toml       # Red agent configuration
+│
+├── green_tools.py            # Green agent tools (with talk_to_agent!)
+├── green_agent_card.toml     # Green agent configuration
+│
 ├── test_red_agent_only.py    # Test script
-│
-├── green_agent_card.toml     # TODO: needs backend integration
-├── green_tools.py            # TODO: needs backend integration
-├── start_demo.sh             # TODO: green agent startup incomplete
+├── start_demo.sh             # Start green + red agents
 ├── stop_demo.sh              # Utility to stop all processes
-├── trigger_battle.py         # TODO: needs /tasks endpoint fix
+├── trigger_battle.py         # Trigger green→red battle (UPDATED)
 │
-├── README.md                 # Main documentation
-├── TERMINAL_TESTING.md       # Terminal-based testing guide (recommended)
-├── CURRENT_STATUS.md         # Current system status & running processes
+├── README.md                 # Main documentation (includes status)
+├── TERMINAL_TESTING.md       # Terminal-based testing guide
 ├── DEMO_GUIDE.md             # Quick 5-minute demo
 ├── TODO.md                   # Detailed task tracking
 │
@@ -150,34 +228,44 @@ examples = ["Example task"]
 Create `my_agent.py`:
 
 ```python
-import time
-import requests
+from typing import Dict, Any
+from agent_base import AgentBase
 from proxy_wrapper import run_with_proxy
 
-class MyAgent:
-    def __init__(self, proxy_url="http://localhost:9025"):
-        self.proxy_url = proxy_url
+class MyAgent(AgentBase):
+    """
+    Your custom agent - just business logic!
 
-    def poll_messages(self):
-        response = requests.get(f"{self.proxy_url}/poll_messages")
-        return response.json().get("messages", [])
+    No infrastructure code needed:
+    - No proxy_url parameters
+    - No poll_messages() or submit_response()
+    - No HTTP requests
+    - No polling loops
 
-    def submit_response(self, text):
-        requests.post(
-            f"{self.proxy_url}/submit_response",
-            json={"response": text}
-        )
+    Just implement process_message()!
+    """
 
-    def run(self):
-        while True:
-            for msg in self.poll_messages():
-                # Your logic here!
-                response = f"Processed: {msg}"
-                self.submit_response(response)
-            time.sleep(1)
+    def process_message(self, message: Dict[str, Any]) -> str:
+        """
+        Process a message and return your response.
+
+        This is the ONLY method you need to implement!
+        """
+        # Extract message text
+        msg_content = message.get("message", {})
+        parts = msg_content.get("parts", [])
+        text = " ".join(p.get("text", "") for p in parts if p.get("type") == "text")
+
+        # Your business logic here!
+        response = f"My agent processed: {text}"
+
+        return response
 
 if __name__ == "__main__":
+    # Create agent (no parameters!)
     agent = MyAgent()
+
+    # Run with framework (one line!)
     run_with_proxy(
         agent,
         agent_card_path="my_agent_card.toml",
@@ -191,7 +279,14 @@ if __name__ == "__main__":
 python my_agent.py
 ```
 
-That's it! Your agent is now A2A-compatible.
+That's it! The framework handles:
+- Starting the proxy server
+- Polling for messages
+- Calling your `process_message()` method
+- Submitting responses
+- A2A protocol details
+
+**You just write the business logic!**
 
 ## How It Works
 
@@ -211,23 +306,35 @@ Implements three interfaces:
 - `GET /poll_messages` - Local agent polls for new messages
 - `POST /submit_response` - Local agent submits responses
 
-### 2. Auto-Proxy Wrapper (`proxy_wrapper.py`)
+### 2. Framework Components
 
-The `run_with_proxy()` function:
-1. Loads your agent card
-2. Starts proxy server in background thread
-3. Calls your agent's `run()` method
+**`agent_base.py`** - Abstract base class
+- Defines single method: `process_message(message) -> str`
+- Agent developers inherit and implement business logic only
+
+**`agent_runner.py`** - Agent execution loop
+- Polls proxy for messages
+- Calls agent's `process_message()` method
+- Submits responses back to proxy
+- Hidden from agent developers
+
+**`proxy_wrapper.py`** - Infrastructure management
+- `ProxyClient` class: Handles proxy communication
+- `run_with_proxy()` function: Orchestrates everything
 
 ### 3. Message Flow
 
 ```
-1. A2A message arrives at proxy: POST /tasks
-2. Proxy queues message internally
-3. Local agent polls: GET /poll_messages
-4. Local agent processes message
-5. Local agent submits response: POST /submit_response
-6. Proxy streams response back to caller in A2A format
+1. Green Agent (LLM) calls talk_to_agent(message, red_agent_url)
+2. A2A message arrives at red proxy: POST /tasks
+3. Proxy queues message internally
+4. AgentRunner polls: GET /poll_messages
+5. AgentRunner calls agent.process_message()
+6. AgentRunner submits: POST /submit_response
+7. Proxy streams response back to green agent in A2A format
 ```
+
+**Key Point:** Steps 3-6 are completely hidden from agent developers!
 
 ## Testing
 
@@ -318,18 +425,26 @@ python test_red_agent_only.py
 
 ## API Reference
 
-### `run_with_proxy(agent, agent_card_path, proxy_host, proxy_port)`
+### `run_with_proxy(agent, agent_card_path, proxy_host, proxy_port, poll_interval)`
 
-Runs a local agent with automatic proxy startup.
+Runs a local agent with automatic proxy startup and framework handling.
 
 **Parameters:**
-- `agent` - Your agent instance (must have `run()` method)
+- `agent` - Your agent instance (must inherit from `AgentBase`)
 - `agent_card_path` - Path to TOML agent card
 - `proxy_host` - Proxy bind address (default: `"0.0.0.0"`)
 - `proxy_port` - Proxy port (default: `9021`)
+- `poll_interval` - Seconds between message polls (default: `3.0`)
 
 **Example:**
 ```python
+from agent_base import AgentBase
+from proxy_wrapper import run_with_proxy
+
+class MyAgent(AgentBase):
+    def process_message(self, message):
+        return "my response"
+
 agent = MyAgent()
 run_with_proxy(agent, "my_card.toml", proxy_port=9025)
 ```
@@ -337,53 +452,82 @@ run_with_proxy(agent, "my_card.toml", proxy_port=9025)
 ### Agent Class Requirements
 
 ```python
-class MyAgent:
-    def __init__(self, proxy_url: str):
-        """Must accept proxy_url parameter"""
-        self.proxy_url = proxy_url
+from typing import Dict, Any
+from agent_base import AgentBase
 
-    def run(self):
-        """Main loop - called by run_with_proxy()"""
-        pass
+class MyAgent(AgentBase):
+    def process_message(self, message: Dict[str, Any]) -> str:
+        """
+        ONLY method you need to implement!
+
+        Args:
+            message: Dict with 'task_id', 'message', 'timestamp'
+
+        Returns:
+            str: Your response text
+        """
+        # Your business logic here
+        return "my response"
 ```
 
-### Proxy Endpoints
+### Green Agent Tools
 
-**For local agents:**
+**`talk_to_agent(message: str, agent_url: str) -> str`**
+
+Green agent (LLM) uses this tool to send A2A messages to other agents:
+
 ```python
-# Poll for messages
-GET {proxy_url}/poll_messages
-Returns: {"messages": [...]}
-
-# Submit response
-POST {proxy_url}/submit_response
-Body: {"response": "your text"}
+# Example: Green agent calling red agent
+response = talk_to_agent(
+    message="Perform your task. battle_id: battle_123",
+    agent_url="http://localhost:9021"
+)
 ```
 
-**For A2A agents:**
+### Proxy Endpoints (Internal - Hidden from Developers)
+
+**A2A Server Interface:**
 ```python
 # Get agent card
 GET {proxy_url}/.well-known/agent.json
 
-# Send message
+# Send A2A message
 POST {proxy_url}/tasks
 Body: {"task_id": "...", "message": {...}}
 Returns: Streaming NDJSON response
 ```
 
+**Local Agent Interface (used by framework):**
+```python
+# Poll for messages (AgentRunner uses this)
+GET {proxy_url}/poll_messages
+Returns: {"messages": [...]}
+
+# Submit response (AgentRunner uses this)
+POST {proxy_url}/submit_response
+Body: {"response": "your text"}
+```
+
+**Developers never call these directly!**
+
+## Recent Updates
+
+✅ **Completed:**
+- Abstract base class (`AgentBase`) for clean developer UX
+- Framework agent loop (`AgentRunner`) handles all infrastructure
+- `talk_to_agent()` tool for green agent A2A communication
+- Refactored all examples to use new architecture
+- Complete abstraction of proxy URLs from agent code
+
 ## Known Issues & TODOs
 
 ### High Priority
-
-- [ ] **Green agent `/tasks` endpoint** - Currently returns 404
-  - AgentBeats agents use different routing than standard A2A
-  - Need to integrate with AgentBeats backend or update trigger script
 
 - [ ] **Error handling** - No retry logic or timeout handling
   - Add exponential backoff for polling
   - Handle proxy crashes gracefully
 
-- [ ] **WebSocket support** - Currently uses polling (1 second interval)
+- [ ] **WebSocket support** - Currently uses polling (3 second interval)
   - Replace HTTP polling with WebSocket for real-time communication
   - More efficient for high-frequency messages
 
@@ -393,14 +537,13 @@ Returns: Streaming NDJSON response
   - Add OAuth/JWT for A2A messages
   - Secure local agent ↔ proxy communication
 
-- [ ] **Battle orchestration** - Green agent needs backend
-  - Set up AgentBeats backend server
-  - Register agents properly
-  - Implement full battle flow
-
 - [ ] **Multiple agent support** - Only one local agent at a time
   - Support multiple local agents with different ports
   - Dynamic port allocation
+
+- [ ] **Battle orchestration testing** - Test full green→red flow
+  - Verify `talk_to_agent()` tool works end-to-end
+  - Test battle coordination scenarios
 
 ### Low Priority
 

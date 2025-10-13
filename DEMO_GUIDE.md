@@ -2,17 +2,23 @@
 
 ## What Works ✅
 
-This PoC demonstrates a **local agent** communicating via the A2A protocol through an auto-starting proxy.
+This PoC demonstrates **local agents** communicating via the A2A protocol with clean developer UX.
 
-### Working Flow:
+### Working Flows:
 
+**Option 1 - Direct Test:**
 ```
-[Test Script] → [Proxy :9021] → [Local Agent] → Response flows back
+[Test Script] → [Red Agent Proxy :9021] → [Local Red Agent] → Response
 ```
 
-## Quick Demo (5 minutes)
+**Option 2 - Full Orchestration:**
+```
+[Trigger] → [Green Agent :9031] → talk_to_agent() → [Red Agent :9021] → Response
+```
 
-### 1. Start the Local Agent
+## Option A: Quick Demo - Red Agent Only (3 minutes)
+
+### Terminal 1: Start the Local Red Agent
 
 ```bash
 python simple_local_agent.py
@@ -23,12 +29,11 @@ You'll see:
 INFO: Starting proxy server on 0.0.0.0:9021
 INFO: Loaded agent card: POC Red Agent (via Proxy)
 INFO: Proxy server started successfully
-INFO: Red agent started!
+INFO: AgentRunner initialized for SimpleRedAgent
+INFO: Starting agent loop for SimpleRedAgent
 ```
 
-### 2. Test Communication
-
-In another terminal:
+### Terminal 2: Test Communication
 
 ```bash
 python test_red_agent_only.py
@@ -44,48 +49,159 @@ Expected output:
 ✓ Test completed successfully!
 ```
 
-### 3. Watch the Logs
+### Stop Everything
+
+Press `Ctrl+C` in Terminal 1.
+
+---
+
+## Option B: Full Two-Agent Battle (5 minutes)
+
+This demonstrates complete green→red agent orchestration using structured JSON battle messages.
+
+### Terminal 1: Start Green Agent (Orchestrator)
 
 ```bash
+# Load environment variables (OpenAI API key needed)
+source .env
+
+# Start green agent
+python -m agentbeats run green_agent_card.toml \
+  --launcher_host 0.0.0.0 --launcher_port 9030 \
+  --agent_host 0.0.0.0 --agent_port 9031 \
+  --model_type openai --model_name gpt-4o-mini \
+  --tool green_tools.py
+```
+
+Expected output:
+```
+INFO: Green agent starting on port 9031
+INFO: Loaded tools: talk_to_agent, evaluate_battle, generate_test_data
+INFO: Agent ready
+```
+
+### Terminal 2: Start Red Agent
+
+```bash
+python simple_local_agent.py
+```
+
+Expected output:
+```
+INFO: Starting proxy server on 0.0.0.0:9021
+INFO: Proxy server started successfully
+INFO: AgentRunner initialized for SimpleRedAgent
+INFO: Starting agent loop for SimpleRedAgent
+```
+
+### Terminal 3: Trigger the Battle
+
+```bash
+python trigger_battle.py
+```
+
+The trigger script sends a structured JSON message to the green agent:
+```json
+{
+  "type": "battle_start",
+  "battle_id": "battle_1234567890",
+  "green_battle_context": {
+    "battle_id": "battle_1234567890",
+    "backend_url": "http://localhost:9000",
+    "agent_name": "green_agent",
+    "task_config": "Test agent-to-agent communication..."
+  },
+  "red_battle_contexts": {
+    "http://localhost:9021": {
+      "battle_id": "battle_1234567890",
+      "backend_url": "http://localhost:9000",
+      "agent_name": "red_agent"
+    }
+  },
+  "opponent_infos": [
+    {"agent_url": "http://localhost:9021", "name": "Red Agent"}
+  ]
+}
+```
+
+Expected output:
+```
+==================================================
+TRIGGERING BATTLE
+==================================================
+Battle ID: battle_1234567890
+Green Agent: http://localhost:9031
+Red Agent: http://localhost:9021
+==================================================
+
+✓ Green Agent is ready
+✓ Red Agent is ready
+
+✓ All agents ready. Sending battle message...
+
+Sending battle trigger to green agent using A2A SDK...
+
+✓ Battle triggered successfully!
+
+Response from green agent:
+--------------------------------------------------
+[Green agent uses talk_to_agent() to communicate with red agent]
+[Red agent responds with battle completion message]
+--------------------------------------------------
+
+✓ Battle completed!
+```
+
+### Watch the Logs (Optional - Terminal 4)
+
+Watch both agent logs:
+```bash
+# Green agent log
+tail -f logs/green_agent.log
+
+# Red agent log (in another terminal)
 tail -f logs/red_agent.log
 ```
 
-You'll see:
-1. Agent polling every second
-2. Message received from proxy
-3. Battle ID extracted
-4. Response generated and submitted
+### Stop Everything
 
-### 4. Stop Everything
-
-```bash
-./stop_demo.sh
-```
-
-Or press `Ctrl+C` in the terminal running the agent.
+Press `Ctrl+C` in Terminals 1 and 2.
 
 ## What This Demonstrates
 
 ✅ **A2A Protocol** - Full streaming message/response format
+✅ **Structured JSON Messages** - Battle info with contexts matching agentbeats backend format
 ✅ **Auto-Proxy** - Single command starts everything
-✅ **Message Polling** - Local agent polls /poll_messages
+✅ **Clean Developer UX** - Agents only contain business logic
+✅ **Framework Abstraction** - All infrastructure hidden from developers
 ✅ **Battle ID Extraction** - Regex parsing from message text
 ✅ **Response Streaming** - NDJSON format back to caller
+✅ **Green→Red Communication** - Green agent has `talk_to_agent()` tool for A2A calls
+
+## Architecture Highlights
+
+**Agent Developer Experience:**
+```python
+class MyAgent(AgentBase):
+    def process_message(self, message):
+        return "my response"  # Just business logic!
+```
+
+**Framework Handles:**
+- Proxy server startup
+- Message polling
+- Response submission
+- A2A protocol details
 
 ## What Doesn't Work Yet 🚧
 
-❌ **Green Agent Integration** - Can't trigger via green agent
-  - Issue: Green agent doesn't expose `/tasks` endpoint
-  - Workaround: Use `test_red_agent_only.py` to test directly
-  - TODO: Integrate with AgentBeats backend
+🚧 **AgentBeats Backend Integration** - Currently using standalone testing
+  - Can test green→red directly without backend
+  - Backend would provide battle management, leaderboards, etc.
+  - TODO: Set up full backend for production use
 
-❌ **Full Battle Flow** - No orchestration yet
-  - TODO: Set up AgentBeats backend
-  - TODO: Register agents with backend
-  - TODO: Trigger battles through backend API
-
-❌ **WebSocket** - Uses polling (1 sec interval)
-  - TODO: Replace with WebSocket for real-time
+🚧 **WebSocket** - Red agent uses polling (3 sec interval)
+  - TODO: Replace with WebSocket for real-time communication
 
 ## Architecture Details
 
@@ -250,15 +366,12 @@ tail -f logs/red_agent.log | grep "poll_messages"
 python test_red_agent_only.py
 ```
 
-### Issue: Green agent 404
+### Issue: Green agent JSON parsing errors
 
-```bash
-POST /tasks HTTP/1.1" 404 Not Found
-```
+**Symptom:** KeyError or JSONDecodeError in green agent logs
 
-**Why:** AgentBeats agents use different routing
-**Workaround:** Use `test_red_agent_only.py` instead
-**TODO:** Fix `trigger_battle.py` to use correct endpoint
+**Why:** Green agent expects structured JSON with battle context fields
+
 
 ## Next Steps
 

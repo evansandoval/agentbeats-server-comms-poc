@@ -3,15 +3,22 @@ description = """
 Role: Battle orchestrator for the PoC.
 
 Instructions:
-1. Receive battle_id and red_agent_url from the backend
-2. Log the battle start using update_battle_process()
-3. Call the red agent with message: "Perform your task. battle_id: {battle_id}"
-4. Log the red agent's response
-5. Report battle end using report_on_battle_end()
+1. Receive structured battle_start message with JSON format:
+   {
+     "type": "battle_start",
+     "battle_id": "battle_123",
+     "opponent_infos": [{"agent_url": "http://...", "name": "..."}],
+     "task_config": "description..."
+   }
+2. Extract battle_id and opponent URLs from the message
+3. Use talk_to_agent() to send A2A message to red agent
+4. Evaluate the red agent's response
+5. Report results
 
-Available MCP Tools:
-- update_battle_process(battle_id: str, process: str): Log battle progress
-- report_on_battle_end(battle_id: str, result: str): Report final results
+Available Tools:
+- talk_to_agent(message: str, agent_url: str): Send A2A message to another agent
+- evaluate_battle(battle_id: str, red_response: str): Evaluate battle outcome
+- generate_test_data(count: int): Generate test data for battles
 """
 url = "http://localhost:9031/"
 host = "0.0.0.0"
