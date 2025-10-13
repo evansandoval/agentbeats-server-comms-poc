@@ -7,7 +7,6 @@ and the proxy is automatically started.
 
 import time
 import logging
-import requests
 import re
 from typing import Dict, Any, Optional
 from proxy_wrapper import run_with_proxy
@@ -19,10 +18,10 @@ logger = logging.getLogger(__name__)
 class SimpleRedAgent:
     """Simple red agent that responds to battle messages"""
 
-    def __init__(self, proxy_url: str = "http://localhost:9021"):
-        self.proxy_url = proxy_url
+    def __init__(self):
         self.running = False
-        logger.info(f"Red agent initialized with proxy: {proxy_url}")
+        self.proxy_client = None  # Will be injected by run_with_proxy
+        logger.info("Red agent initialized")
 
     def extract_battle_id(self, message_text: str) -> Optional[str]:
         """Extract battle_id from message text"""
@@ -33,27 +32,17 @@ class SimpleRedAgent:
 
     def poll_messages(self) -> list:
         """Poll the proxy for new messages"""
-        try:
-            response = requests.get(f"{self.proxy_url}/poll_messages", timeout=5)
-            response.raise_for_status()
-            return response.json().get("messages", [])
-        except Exception as e:
-            logger.error(f"Error polling: {e}")
+        if self.proxy_client is None:
+            logger.error("ProxyClient not injected - did you use run_with_proxy()?")
             return []
+        return self.proxy_client.poll_messages()
 
     def submit_response(self, response_text: str) -> bool:
         """Submit a response to the proxy"""
-        try:
-            response = requests.post(
-                f"{self.proxy_url}/submit_response",
-                json={"response": response_text},
-                timeout=5
-            )
-            response.raise_for_status()
-            return True
-        except Exception as e:
-            logger.error(f"Error submitting: {e}")
+        if self.proxy_client is None:
+            logger.error("ProxyClient not injected - did you use run_with_proxy()?")
             return False
+        return self.proxy_client.submit_response(response_text)
 
     def process_message(self, message: Dict[str, Any]) -> str:
         """Process a message and generate a response"""
@@ -100,7 +89,7 @@ class SimpleRedAgent:
                         logger.error(f"Error processing message: {e}")
 
                 # Wait before next poll
-                time.sleep(1.0)
+                time.sleep(3.0)
 
         except KeyboardInterrupt:
             logger.info("Shutting down...")
@@ -110,9 +99,10 @@ class SimpleRedAgent:
 
 def main():
     """Main entry point - single command to run everything!"""
-    agent = SimpleRedAgent(proxy_url="http://localhost:9021")
+    # Create agent - no proxy URL needed!
+    agent = SimpleRedAgent()
 
-    # Run with automatic proxy startup
+    # Run with automatic proxy startup - proxy URL is handled internally
     run_with_proxy(
         agent,
         agent_card_path="red_agent_card.toml",

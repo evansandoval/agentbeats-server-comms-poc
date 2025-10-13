@@ -9,11 +9,46 @@ import asyncio
 import threading
 import time
 import logging
-from typing import Optional, Callable, Any
+import requests
+from typing import Optional, Callable, Any, Dict, List
 import uvicorn
 from red_agent_proxy import app, load_agent_card
 
 logger = logging.getLogger(__name__)
+
+
+class ProxyClient:
+    """
+    Client interface for agents to communicate with proxy.
+    Abstracts away proxy URL - agents just call methods without knowing implementation.
+    """
+
+    def __init__(self, proxy_url: str):
+        self._proxy_url = proxy_url
+
+    def poll_messages(self) -> List[Dict[str, Any]]:
+        """Poll the proxy for new messages"""
+        try:
+            response = requests.get(f"{self._proxy_url}/poll_messages", timeout=5)
+            response.raise_for_status()
+            return response.json().get("messages", [])
+        except Exception as e:
+            logger.error(f"Error polling messages: {e}")
+            return []
+
+    def submit_response(self, response_text: str) -> bool:
+        """Submit a response to the proxy"""
+        try:
+            response = requests.post(
+                f"{self._proxy_url}/submit_response",
+                json={"response": response_text},
+                timeout=5
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            logger.error(f"Error submitting response: {e}")
+            return False
 
 
 class ProxyWrapper:
@@ -123,12 +158,18 @@ def run_with_proxy(
 ):
     """
     Function to run a local agent with automatic proxy startup.
+    Injects ProxyClient into the agent so it doesn't need to know the proxy URL.
 
     Usage:
         agent = MyLocalAgent()
         run_with_proxy(agent, agent_card_path="my_agent_card.toml")
     """
     with ProxyWrapper(agent_card_path, proxy_host, proxy_port):
+        # Inject ProxyClient into agent
+        proxy_url = f"http://{proxy_host}:{proxy_port}"
+        agent_instance.proxy_client = ProxyClient(proxy_url)
+        logger.info(f"Injected ProxyClient into agent")
+
         # Check if agent has a 'run' method
         if hasattr(agent_instance, 'run'):
             agent_instance.run()
