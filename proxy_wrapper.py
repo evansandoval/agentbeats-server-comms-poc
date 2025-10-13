@@ -154,24 +154,39 @@ def run_with_proxy(
     agent_instance: Any,
     agent_card_path: str = "red_agent_card.toml",
     proxy_host: str = "0.0.0.0",
-    proxy_port: int = 9021
+    proxy_port: int = 9021,
+    poll_interval: float = 3.0
 ):
     """
-    Function to run a local agent with automatic proxy startup.
-    Injects ProxyClient into the agent so it doesn't need to know the proxy URL.
+    Run a local agent with automatic proxy startup.
+
+    This function handles all infrastructure:
+    - Starts the proxy server
+    - Creates proxy client
+    - Runs agent loop with polling/processing/submission
+
+    Agent developers just pass their agent instance - everything else
+    is abstracted away.
+
+    Args:
+        agent_instance: Agent instance (must inherit from AgentBase)
+        agent_card_path: Path to agent card TOML file
+        proxy_host: Host to bind proxy server
+        proxy_port: Port for proxy server
+        poll_interval: Time between message polls (seconds)
 
     Usage:
         agent = MyLocalAgent()
         run_with_proxy(agent, agent_card_path="my_agent_card.toml")
     """
-    with ProxyWrapper(agent_card_path, proxy_host, proxy_port):
-        # Inject ProxyClient into agent
-        proxy_url = f"http://{proxy_host}:{proxy_port}"
-        agent_instance.proxy_client = ProxyClient(proxy_url)
-        logger.info(f"Injected ProxyClient into agent")
+    from agent_runner import AgentRunner
 
-        # Check if agent has a 'run' method
-        if hasattr(agent_instance, 'run'):
-            agent_instance.run()
-        else:
-            logger.error("Agent instance must have a 'run()' method")
+    with ProxyWrapper(agent_card_path, proxy_host, proxy_port):
+        # Create proxy client
+        proxy_url = f"http://{proxy_host}:{proxy_port}"
+        proxy_client = ProxyClient(proxy_url)
+        logger.info(f"Created ProxyClient for {proxy_url}")
+
+        # Create and run agent with runner
+        runner = AgentRunner(agent_instance, proxy_client, poll_interval)
+        runner.run()

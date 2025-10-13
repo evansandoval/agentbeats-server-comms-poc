@@ -5,22 +5,25 @@ This demonstrates the improved UX where the user just runs their agent
 and the proxy is automatically started.
 """
 
-import time
 import logging
 import re
 from typing import Dict, Any, Optional
+from agent_base import AgentBase
 from proxy_wrapper import run_with_proxy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class SimpleRedAgent:
-    """Simple red agent that responds to battle messages"""
+class SimpleRedAgent(AgentBase):
+    """
+    Simple red agent that responds to battle messages.
+
+    This agent only contains business logic - all infrastructure
+    (proxy communication, HTTP, etc.) is handled by the framework.
+    """
 
     def __init__(self):
-        self.running = False
-        self.proxy_client = None  # Will be injected by run_with_proxy
         logger.info("Red agent initialized")
 
     def extract_battle_id(self, message_text: str) -> Optional[str]:
@@ -30,22 +33,13 @@ class SimpleRedAgent:
             return match.group(1)
         return None
 
-    def poll_messages(self) -> list:
-        """Poll the proxy for new messages"""
-        if self.proxy_client is None:
-            logger.error("ProxyClient not injected - did you use run_with_proxy()?")
-            return []
-        return self.proxy_client.poll_messages()
-
-    def submit_response(self, response_text: str) -> bool:
-        """Submit a response to the proxy"""
-        if self.proxy_client is None:
-            logger.error("ProxyClient not injected - did you use run_with_proxy()?")
-            return False
-        return self.proxy_client.submit_response(response_text)
-
     def process_message(self, message: Dict[str, Any]) -> str:
-        """Process a message and generate a response"""
+        """
+        Process a message and generate a response.
+
+        This is the only method that contains business logic.
+        All infrastructure is handled by the framework.
+        """
         logger.info(f"Processing message: {message}")
 
         # Extract message text
@@ -69,32 +63,6 @@ class SimpleRedAgent:
 
         logger.info(f"Generated response: {response}")
         return response
-
-    def run(self):
-        """Main agent loop"""
-        self.running = True
-        logger.info("Red agent started!")
-
-        try:
-            while self.running:
-                # Poll for messages
-                messages = self.poll_messages()
-
-                # Process each message
-                for message in messages:
-                    try:
-                        response = self.process_message(message)
-                        self.submit_response(response)
-                    except Exception as e:
-                        logger.error(f"Error processing message: {e}")
-
-                # Wait before next poll
-                time.sleep(3.0)
-
-        except KeyboardInterrupt:
-            logger.info("Shutting down...")
-        finally:
-            self.running = False
 
 
 def main():
