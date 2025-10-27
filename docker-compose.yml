@@ -1,0 +1,72 @@
+services:
+  # Central WebSocket server
+  server:
+    build:
+      context: .
+      target: server
+    container_name: a2a-proxy-server
+    ports:
+      - "8000:8000"
+    networks:
+      - a2a-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Green agent (assessment manager) + proxy
+  green-agent:
+    build:
+      context: .
+      target: agent
+    container_name: a2a-green-agent
+    # No ports exposed - only accessible via WebSocket server
+    environment:
+      - AGENT_TYPE=green
+      - AGENT_NAME=tau_green_agent
+      - AGENT_HOST=0.0.0.0
+      - AGENT_PORT=9001
+      - PROXY_PORT=9101
+      - SERVER_URL=ws://server:8000
+      - AGENT_ID=green
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file:
+      - .env
+    networks:
+      - a2a-network
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # White agent (target being tested) + proxy
+  white-agent:
+    build:
+      context: .
+      target: agent
+    container_name: a2a-white-agent
+    # No ports exposed - only accessible via WebSocket server
+    environment:
+      - AGENT_TYPE=white
+      - AGENT_NAME=general_white_agent
+      - AGENT_HOST=0.0.0.0
+      - AGENT_PORT=9002
+      - PROXY_PORT=9102
+      - SERVER_URL=ws://server:8000
+      - AGENT_ID=white-1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file:
+      - .env
+    networks:
+      - a2a-network
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  a2a-network:
+    driver: bridge

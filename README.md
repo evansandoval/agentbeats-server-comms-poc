@@ -38,23 +38,35 @@ This avoids URL encoding issues and maintains proper A2A message format.
 
 ## Installation
 
-```bash
-uv sync
-```
+### Option 1: Docker (Recommended)
 
-## Quick Start
-
-Launch complete evaluation with WebSocket proxy routing:
+Requires Docker and Docker Compose installed.
 
 ```bash
-uv run python main.py launch
+# Create .env file with your OpenAI API key
+echo "OPENAI_API_KEY=your_key_here" > .env
+
+# Build and start all services
+docker-compose up --build
 ```
 
 This starts:
-1. Central WebSocket server on `ws://localhost:8000`
+1. Central WebSocket server on `localhost:8000`
 2. Green agent + proxy (agent: `localhost:9001`, proxy: `localhost:9101`)
 3. White agent + proxy (agent: `localhost:9002`, proxy: `localhost:9102`)
-4. Server-initiated task assignment to green agent
+
+### Option 2: Local Development
+
+```bash
+# Install dependencies
+uv sync
+
+# Configure environment
+echo "OPENAI_API_KEY=your_key_here" > .env
+
+# Launch all components
+uv run python main.py launch
+```
 
 ## Configuration
 
@@ -305,20 +317,77 @@ start_white_agent(
 
 ## Development
 
-### Docker Deployment
+### Docker Commands
 
-The proxy architecture allows agents to be deployed in separate containers or machines while maintaining A2A compatibility. Each agent container runs two processes:
+**Start all services**:
+```bash
+docker-compose up
+```
+
+**Start in background**:
+```bash
+docker-compose up -d
+```
+
+**View logs**:
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f green-agent
+docker-compose logs -f white-agent
+docker-compose logs -f server
+```
+
+**Stop all services**:
+```bash
+docker-compose down
+```
+
+**Rebuild after code changes**:
+```bash
+docker-compose up --build
+```
+
+**Send task to green agent** (after services are running):
+```bash
+curl -X POST http://localhost:8000/tasks/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "green",
+    "task_body": {
+      "task": "Your task is to instantiate tau-bench to test the following agent.",
+      "agents": {
+        "white-1": {
+          "agent_id": "white-1",
+          "description": "Target agent to test"
+        }
+      },
+      "env_config": {
+        "env": "retail",
+        "user_strategy": "llm",
+        "user_model": "openai/gpt-4o",
+        "user_provider": "openai",
+        "task_split": "test",
+        "task_ids": [1]
+      }
+    }
+  }'
+```
+
+### Docker Architecture
+
+The proxy architecture allows agents to be deployed in separate containers while maintaining A2A compatibility. Each agent container runs two processes:
 - **Agent process**: Standard A2A HTTP server
 - **Proxy process**: WebSocket adapter (auto-started by agent)
 
-Example Dockerfile pattern:
-```dockerfile
-FROM python:3.11
-WORKDIR /app
-COPY . .
-RUN pip install -e .
-CMD ["python", "-m", "src.green_agent.agent"]  # Proxy auto-starts
-```
+The `docker-compose.yml` orchestrates:
+- **server**: WebSocket router (port 8000)
+- **green-agent**: Assessment manager + proxy (ports 9001, 9101)
+- **white-agent**: Target agent + proxy (ports 9002, 9102)
+
+All containers communicate via Docker bridge network using service names (e.g., `ws://server:8000`).
 
 ### Testing
 
