@@ -53,14 +53,13 @@ class GeneralWhiteAgentExecutor(AgentExecutor):
                 "content": user_input,
             }
         )
-        # response = completion(
-        #     messages=messages,
-        #     model="openai/gpt-4o",
-        #     custom_llm_provider="openai",
-        #     temperature=0.0,
-        # )
-        # next_message = response.choices[0].message.model_dump()  # type: ignore
-        next_message = {"content": "White agent dummy response"}
+        response = completion(
+            messages=messages,
+            model="openai/gpt-4o",
+            custom_llm_provider="openai",
+            temperature=0.0,
+        )
+        next_message = response.choices[0].message.model_dump()  # type: ignore
 
         print(next_message["content"])
         messages.append(
@@ -79,8 +78,42 @@ class GeneralWhiteAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_white_agent(agent_name="general_white_agent", host="localhost", port=9002):
+def start_white_agent(
+    agent_name="general_white_agent",
+    host="localhost",
+    port=9002,
+    server_url=None,
+    agent_id=None,
+    proxy_port=None,
+):
+    """
+    Start white agent with optional proxy support.
+
+    Args:
+        agent_name: Name of the agent
+        host: Host to bind agent HTTP server
+        port: Port for agent HTTP server
+        server_url: WebSocket URL of central server (e.g., ws://localhost:8000)
+        agent_id: Agent identifier for registration
+        proxy_port: Port for proxy HTTP server
+    """
     print("Starting white agent...")
+
+    # Start proxy if configuration provided
+    if server_url and agent_id and proxy_port:
+        print(f"White agent spawning proxy: agent_id={agent_id}, proxy_port={proxy_port}")
+        import multiprocessing
+        from src.proxy.agent_proxy import start_agent_proxy
+
+        local_agent_url = f"http://{host}:{port}"
+        p_proxy = multiprocessing.Process(
+            target=start_agent_proxy,
+            args=(agent_id, local_agent_url, server_url, proxy_port, host),
+        )
+        p_proxy.start()
+        print(f"White agent proxy started (PID: {p_proxy.pid})")
+
+    # Start agent HTTP server
     url = f"http://{host}:{port}"
     card = prepare_white_agent_card(url)
 

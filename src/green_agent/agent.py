@@ -135,11 +135,16 @@ class TauGreenAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the task
         print("Green agent: Received a task, parsing...")
+        print(f"Green agent: Context ID: {context.context_id}")
         user_input = context.get_user_input()
+        print(f"Green agent: User input:\n{user_input}")
         tags = parse_tags(user_input)
+        print(f"Green agent: Parsed tags: {list(tags.keys())}")
         white_agent_url = tags["white_agent_url"]
+        print(f"Green agent: White agent URL: {white_agent_url}")
         env_config_str = tags["env_config"]
         env_config = json.loads(env_config_str)
+        print(f"Green agent: Env config: {env_config}")
 
         # set up the environment
         # migrate from https://github.com/sierra-research/tau-bench/blob/4754e6b406507dbcbce8e8b3855dcf80aaec18ac/tau_bench/run.py#L20
@@ -188,8 +193,42 @@ class TauGreenAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_green_agent(agent_name="tau_green_agent", host="localhost", port=9001):
+def start_green_agent(
+    agent_name="tau_green_agent",
+    host="localhost",
+    port=9001,
+    server_url=None,
+    agent_id=None,
+    proxy_port=None,
+):
+    """
+    Start green agent with optional proxy support.
+
+    Args:
+        agent_name: Name of the agent configuration
+        host: Host to bind agent HTTP server
+        port: Port for agent HTTP server
+        server_url: WebSocket URL of central server (e.g., ws://localhost:8000)
+        agent_id: Agent identifier for registration
+        proxy_port: Port for proxy HTTP server
+    """
     print("Starting green agent...")
+
+    # Start proxy if configuration provided
+    if server_url and agent_id and proxy_port:
+        print(f"Green agent spawning proxy: agent_id={agent_id}, proxy_port={proxy_port}")
+        import multiprocessing
+        from src.proxy.agent_proxy import start_agent_proxy
+
+        local_agent_url = f"http://{host}:{port}"
+        p_proxy = multiprocessing.Process(
+            target=start_agent_proxy,
+            args=(agent_id, local_agent_url, server_url, proxy_port, host),
+        )
+        p_proxy.start()
+        print(f"Green agent proxy started (PID: {p_proxy.pid})")
+
+    # Start agent HTTP server
     agent_card_dict = load_agent_card_toml(agent_name)
     url = f"http://{host}:{port}"
     agent_card_dict["url"] = url  # complete all required card fields
