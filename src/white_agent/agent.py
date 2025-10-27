@@ -53,13 +53,15 @@ class GeneralWhiteAgentExecutor(AgentExecutor):
                 "content": user_input,
             }
         )
-        response = completion(
-            messages=messages,
-            model="openai/gpt-4o",
-            custom_llm_provider="openai",
-            temperature=0.0,
-        )
-        next_message = response.choices[0].message.model_dump()  # type: ignore
+        # response = completion(
+        #     messages=messages,
+        #     model="openai/gpt-4o",
+        #     custom_llm_provider="openai",
+        #     temperature=0.0,
+        # )
+        # next_message = response.choices[0].message.model_dump()  # type: ignore
+        next_message = {"content": "White agent dummy response"}
+
         print(next_message["content"])
         messages.append(
             {
