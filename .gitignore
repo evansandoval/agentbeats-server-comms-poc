@@ -1,6 +1,17 @@
+.vscode/
+instructions/
 .env
-.claude
-.git
-.vscode
-/__pycache__
-/logs
+*.log
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+res.txt

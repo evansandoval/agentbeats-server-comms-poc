@@ -1,0 +1,122 @@
+INFO:     Started server process [2385]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9030 (Press CTRL+C to quit)
+INFO:     Started server process [2408]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:9031 (Press CTRL+C to quit)
+INFO:     127.0.0.1:40492 - "GET /.well-known/agent-card.json HTTP/1.1" 200 OK
+Deprecated agent card endpoint '/.well-known/agent.json' accessed. Please use '/.well-known/agent-card.json' instead. This endpoint will be removed in a future version.
+INFO:     127.0.0.1:40500 - "GET /.well-known/agent.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40500 - "POST / HTTP/1.1" 200 OK
+RAW INPUT JSON
+ {'type': 'battle_start', 'battle_id': 'battle_1760743965', 'green_battle_context': {'battle_id': 'battle_1760743965', 'backend_url': 'http://localhost:9000', 'agent_name': 'green_agent', 'task_config': 'Task description: Test agent-to-agent communication. Use talk_to_agent tool to send a message to the red agent and report back the response.'}, 'red_battle_contexts': {'http://localhost:9021': {'battle_id': 'battle_1760743965', 'backend_url': 'http://localhost:9000', 'agent_name': 'red_agent'}}, 'opponent_infos': [{'agent_url': 'http://localhost:9021', 'name': 'Red Agent'}]}
+Background task cleanup_producer:b3deb1ab-114e-4817-8564-4fa29e15c014 failed
+Traceback (most recent call last):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 458, in execute
+    "frontend_agent_name": raw_input_json["agent_name"],
+                           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+KeyError: 'agent_name'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 433, in _on_done
+    completed.result()
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/utils/telemetry.py", line 196, in async_wrapper
+    result = await func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 451, in _cleanup_producer
+    await producer_task
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/utils/telemetry.py", line 196, in async_wrapper
+    result = await func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 213, in _run_event_stream
+    await self.agent_executor.execute(request, queue)
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 477, in execute
+    reply_text = await self.invoke_agent(context)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 408, in invoke_agent
+    await self._init_agent_and_mcp()
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 388, in _init_agent_and_mcp
+    self.main_agent = create_agent(
+                      ^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 93, in create_agent
+    ).strip()  # in case of empty \n
+      ^^^^^
+AttributeError: 'NoneType' object has no attribute 'strip'
+ERROR:    Exception in ASGI application
+  + Exception Group Traceback (most recent call last):
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/uvicorn/protocols/http/h11_impl.py", line 403, in run_asgi
+  |     result = await app(  # type: ignore[func-returns-value]
+  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+  |     return await self.app(scope, receive, send)
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/applications.py", line 113, in __call__
+  |     await self.middleware_stack(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/middleware/errors.py", line 186, in __call__
+  |     raise exc
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/middleware/errors.py", line 164, in __call__
+  |     await self.app(scope, receive, _send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+  |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+  |     raise exc
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+  |     await app(scope, receive, sender)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/routing.py", line 716, in __call__
+  |     await self.middleware_stack(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/routing.py", line 736, in app
+  |     await route.handle(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/routing.py", line 290, in handle
+  |     await self.app(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/routing.py", line 78, in app
+  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+  |     raise exc
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+  |     await app(scope, receive, sender)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/starlette/routing.py", line 76, in app
+  |     await response(scope, receive, send)
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/sse_starlette/sse.py", line 255, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/anyio/_backends/_asyncio.py", line 781, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 458, in execute
+    |     "frontend_agent_name": raw_input_json["agent_name"],
+    |                            ~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+    | KeyError: 'agent_name'
+    | 
+    | During handling of the above exception, another exception occurred:
+    | 
+    | Traceback (most recent call last):
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 433, in _on_done
+    |     completed.result()
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/utils/telemetry.py", line 196, in async_wrapper
+    |     result = await func(*args, **kwargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 451, in _cleanup_producer
+    |     await producer_task
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/utils/telemetry.py", line 196, in async_wrapper
+    |     result = await func(*args, **kwargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/server/request_handlers/default_request_handler.py", line 213, in _run_event_stream
+    |     await self.agent_executor.execute(request, queue)
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 477, in execute
+    |     reply_text = await self.invoke_agent(context)
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 408, in invoke_agent
+    |     await self._init_agent_and_mcp()
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 388, in _init_agent_and_mcp
+    |     self.main_agent = create_agent(
+    |                       ^^^^^^^^^^^^^
+    |   File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/agent_executor.py", line 93, in create_agent
+    |     ).strip()  # in case of empty \n
+    |       ^^^^^
+    | AttributeError: 'NoneType' object has no attribute 'strip'
+    +------------------------------------

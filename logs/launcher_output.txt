@@ -1,0 +1,103 @@
+Traceback (most recent call last):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_transports/default.py", line 271, in __aiter__
+    async for part in self._httpcore_stream:
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 407, in __aiter__
+    raise exc from None
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 403, in __aiter__
+    async for part in self._stream:
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/http11.py", line 342, in __aiter__
+    raise exc
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/http11.py", line 334, in __aiter__
+    async for chunk in self._connection._receive_response_body(**kwargs):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/http11.py", line 203, in _receive_response_body
+    event = await self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_async/http11.py", line 213, in _receive_event
+    with map_exceptions({h11.RemoteProtocolError: RemoteProtocolError}):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.RemoteProtocolError: peer closed connection without sending complete message body (incomplete chunked read)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/client/transports/jsonrpc.py", line 165, in send_message_streaming
+    async for sse in event_source.aiter_sse():
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx_sse/_api.py", line 42, in aiter_sse
+    async for line in lines:
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx_sse/_api.py", line 80, in _aiter_sse_lines
+    async for text in response.aiter_text():
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_models.py", line 1018, in aiter_text
+    async for byte_content in self.aiter_bytes():
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_models.py", line 997, in aiter_bytes
+    async for raw_bytes in self.aiter_raw():
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_models.py", line 1055, in aiter_raw
+    async for raw_stream_bytes in self.stream:
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_client.py", line 176, in __aiter__
+    async for chunk in self._stream:
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_transports/default.py", line 270, in __aiter__
+    with map_httpcore_exceptions():
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.RemoteProtocolError: peer closed connection without sending complete message body (incomplete chunked read)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/esand/agentbeat-server-comms/trigger_battle.py", line 101, in trigger_battle
+    response = await send_message_to_agent(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/agentbeats/utils/agents/a2a.py", line 100, in send_message_to_agent
+    async for chunk in client.send_message_streaming(req):
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/client/legacy.py", line 125, in send_message_streaming
+    async for result in self._transport.send_message_streaming(
+  File "/home/esand/miniconda3/envs/proxy-poc/lib/python3.11/site-packages/a2a/client/transports/jsonrpc.py", line 179, in send_message_streaming
+    raise A2AClientHTTPError(
+a2a.client.errors.A2AClientHTTPError: HTTP Error 503: Network communication error: peer closed connection without sending complete message body (incomplete chunked read)
+
+==================================================
+TRIGGERING BATTLE
+==================================================
+Battle ID: battle_1760743965
+Green Agent: http://localhost:9031
+Red Agent: http://localhost:9021
+==================================================
+
+Checking agents...
+✓ Green Agent is ready
+✓ Red Agent is ready
+
+✓ All agents ready. Sending battle message...
+
+Sending battle trigger to green agent using A2A SDK...
+Battle info: {
+  "type": "battle_start",
+  "battle_id": "battle_1760743965",
+  "green_battle_context": {
+    "battle_id": "battle_1760743965",
+    "backend_url": "http://localhost:9000",
+    "agent_name": "green_agent",
+    "task_config": "Task description: Test agent-to-agent communication. Use talk_to_agent tool to send a message to the red agent and report back the response."
+  },
+  "red_battle_contexts": {
+    "http://localhost:9021": {
+      "battle_id": "battle_1760743965",
+      "backend_url": "http://localhost:9000",
+      "agent_name": "red_agent"
+    }
+  },
+  "opponent_infos": [
+    {
+      "agent_url": "http://localhost:9021",
+      "name": "Red Agent"
+    }
+  ]
+}
+
+✗ Error triggering battle: HTTP Error 503: Network communication error: peer closed connection without sending complete message body (incomplete chunked read)
