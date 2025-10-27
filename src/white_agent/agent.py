@@ -42,7 +42,11 @@ class GeneralWhiteAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the task
-        print("WHITE AGENT EXECUTING")
+        print(f"\n{'='*60}", flush=True)
+        print(f"[AGENT:white] ⚪ EXECUTING request", flush=True)
+        print(f"  Context ID: {context.context_id}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
         user_input = context.get_user_input()
         if context.context_id not in self.ctx_id_to_messages:
             self.ctx_id_to_messages[context.context_id] = []

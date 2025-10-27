@@ -47,6 +47,13 @@ class AgentServer:
         target_agent = envelope.to_agent
         request_id = envelope.request_id
 
+        print(f"\n{'='*60}", flush=True)
+        print(f"[SERVER] 🔄 ROUTING request", flush=True)
+        print(f"  Request ID: {request_id}", flush=True)
+        print(f"  From: {envelope.from_agent} → To: {envelope.to_agent}", flush=True)
+        print(f"  Method: {envelope.method} {envelope.path}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
         # Check if target agent is online
         async with self.lock:
             target_ws = self.agents.get(target_agent)
@@ -69,10 +76,7 @@ class AgentServer:
         # Forward request to target
         try:
             await target_ws.send_json(envelope.model_dump(by_alias=True))
-            print(
-                f"→ Request {request_id}: {envelope.from_agent} → {envelope.to_agent} "
-                f"({envelope.method} {envelope.path})"
-            )
+            print(f"✓ Forwarded to {envelope.to_agent}'s proxy")
         except Exception as e:
             # Failed to send, clean up and notify origin
             async with self.lock:
@@ -89,6 +93,12 @@ class AgentServer:
         """Route response back to original requester."""
         request_id = envelope.request_id
 
+        print(f"\n{'='*60}", flush=True)
+        print(f"[SERVER] ↩️  ROUTING response", flush=True)
+        print(f"  Request ID: {request_id}", flush=True)
+        print(f"  Status: {envelope.status_code}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
         # Find original requester
         async with self.lock:
             origin_ws = self.pending.pop(request_id, None)
@@ -100,7 +110,7 @@ class AgentServer:
         # Send response back
         try:
             await origin_ws.send_json(envelope.model_dump())
-            print(f"← Response {request_id}: Status {envelope.status_code}")
+            print(f"✓ Response sent back to origin proxy")
         except Exception as e:
             print(f"✗ Response {request_id}: Failed to send back - {e}")
 

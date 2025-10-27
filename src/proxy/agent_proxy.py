@@ -40,6 +40,8 @@ class AgentProxy:
         agent_id: str,
         local_agent_url: str,
         server_url: str,
+        # For now, we hardcode these to be different
+        # After dockerizing, we can hardcode a single port that all agents use for their own proxy
         proxy_port: int,
     ):
         self.agent_id = agent_id
@@ -51,6 +53,50 @@ class AgentProxy:
         self.pending_responses: Dict[str, asyncio.Future] = {}
         self.http_client = httpx.AsyncClient(timeout=120.0)
         self.ws_task: Optional[asyncio.Task] = None
+
+    def _log_header(self, emoji: str, title: str, **details):
+        """Helper to print consistent log headers."""
+        print(f"\n{'='*60}", flush=True)
+        print(f"[PROXY:{self.agent_id}] {emoji} {title}", flush=True)
+        for key, value in details.items():
+            print(f"  {key}: {value}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
+    def _format_task_text(self, task_config: dict) -> str:
+        """
+        Format task config as XML-tagged text for tau-bench.
+        Translates agent IDs to proxy URLs.
+        """
+        text_parts = []
+
+        if "task" in task_config:
+            text_parts.append(task_config["task"])
+
+        # Add agent URLs - translate to proxy URLs
+        if "agents" in task_config:
+            for agent_id_key in task_config["agents"].keys():
+                proxy_url = f"http://localhost:{self.proxy_port}/agents/{agent_id_key}/"
+                text_parts.append(
+                    f"<white_agent_url>\n{proxy_url}\n</white_agent_url>"
+                )
+
+        # Add env config
+        if "env_config" in task_config:
+            env_json = json.dumps(task_config["env_config"], indent=2)
+            text_parts.append(f"<env_config>\n{env_json}\n</env_config>")
+
+        return "\n".join(text_parts)
+
+    async def _send_response_envelope(self, request_id: str, status_code: int,
+                                     headers: dict, body_text: str):
+        """Helper to create and send response envelope via WebSocket."""
+        response_envelope = ResponseEnvelope(
+            request_id=request_id,
+            status_code=status_code,
+            headers=headers,
+            body_text=body_text,
+        )
+        await self.ws.send(json.dumps(response_envelope.model_dump()))
 
     async def connect_to_server(self):
         """Establish WebSocket connection and register with server."""
@@ -79,7 +125,7 @@ class AgentProxy:
                 msg_type = data.get("type")
 
                 if msg_type == "start_task":
-                    # Server initiating a task - use A2A client to send to local agent
+                    # Server initiating an evaluation - use A2A client to send to local agent
                     from src.proxy.messages import StartTaskMessage
                     start_task = StartTaskMessage(**data)
                     asyncio.create_task(self._handle_start_task(start_task))
@@ -112,29 +158,9 @@ class AgentProxy:
         print(f"[{self.agent_id}] ← Start task {start_task.task_id} from server")
 
         from src.my_util import my_a2a
-        import json
 
-        task_config = start_task.task_config
-
-        # Build task text in XML tags format (tau-bench style)
-        text_parts = []
-        if "task" in task_config:
-            text_parts.append(task_config["task"])
-
-        # Add agent URLs - translate to proxy URLs
-        if "agents" in task_config:
-            for agent_id_key in task_config["agents"].keys():
-                proxy_url = f"http://localhost:{self.proxy_port}/agents/{agent_id_key}/"
-                text_parts.append(
-                    f"<white_agent_url>\n{proxy_url}\n</white_agent_url>"
-                )
-
-        # Add env config
-        if "env_config" in task_config:
-            env_json = json.dumps(task_config["env_config"], indent=2)
-            text_parts.append(f"<env_config>\n{env_json}\n</env_config>")
-
-        task_text = "\n".join(text_parts)
+        # Format task text using helper
+        task_text = self._format_task_text(start_task.task_config)
 
         print(f"[{self.agent_id}] Sending task to local agent via A2A client")
         print(f"Task text:\n{task_text}")
@@ -149,168 +175,51 @@ class AgentProxy:
 
     async def _handle_incoming_request(self, envelope: RequestEnvelope):
         """
-        Handle incoming request from server - forward to local agent.
-        Performs URL translation: inject proxy URLs for agent references.
+        Handle incoming request from another agent via websocket with server.
+        Uses httpx to forward HTTP request to local agent.
         """
-        print(
-            f"[{self.agent_id}] ← Incoming request {envelope.request_id}: "
-            f"{envelope.from_agent} → local agent ({envelope.method} {envelope.path})"
+        self._log_header(
+            "📥", "RECEIVED from server via WebSocket",
+            request_id=envelope.request_id,
+            from_to=f"{envelope.from_agent} → To: local {self.agent_id} agent",
+            method_path=f"{envelope.method} {envelope.path}"
         )
 
         try:
-            # Parse body and translate agent references
-            body_text = envelope.body_text
-            if body_text:
-                # Body is already A2A format from server
-                # We need to extract the text, translate URLs, and re-wrap
-                from a2a.types import SendMessageRequest
-                import re
-
-                try:
-                    # Parse A2A message
-                    a2a_msg = SendMessageRequest.model_validate_json(body_text)
-
-                    # Extract text from message parts
-                    text_content = ""
-                    if a2a_msg.params and a2a_msg.params.message:
-                        for part in a2a_msg.params.message.parts:
-                            if hasattr(part, 'text') and part.text:
-                                text_content += part.text
-
-                    # Translate <target_agent_id>X</target_agent_id> to <white_agent_url>http://...</white_agent_url>
-                    def replace_agent_id(match):
-                        agent_id = match.group(1)
-                        proxy_url = f"http://localhost:{self.proxy_port}/agents/{agent_id}/"
-                        return f"<white_agent_url>\n{proxy_url}\n</white_agent_url>"
-
-                    translated_text = re.sub(
-                        r'<target_agent_id>(.*?)</target_agent_id>',
-                        replace_agent_id,
-                        text_content
-                    )
-
-                    # Update the text in the A2A message
-                    if a2a_msg.params and a2a_msg.params.message and a2a_msg.params.message.parts:
-                        from a2a.types import Part, TextPart
-                        a2a_msg.params.message.parts = [Part(TextPart(text=translated_text))]
-
-                    # Serialize back to JSON
-                    body_text = a2a_msg.model_dump_json()
-                    print(f"[{self.agent_id}] Translated agent URLs in A2A message")
-
-                except Exception as e:
-                    print(f"[{self.agent_id}] Warning: Could not parse as A2A message: {e}")
-                    # Keep original body_text if parsing fails
-
-            # Forward to local agent
-            # Use httpx.URL with raw_path to prevent encoding the colon
+            # Forward to local agent using httpx with raw path to avoid encoding ":"
             from httpx import URL
 
             base_url = URL(self.local_agent_url)
-            # Construct URL with raw path (no encoding)
             full_url = base_url.copy_with(raw_path=envelope.path.encode('utf-8'))
-
-            print(f"[{self.agent_id}] sending request to {full_url}")
 
             response = await self.http_client.request(
                 method=envelope.method,
                 url=full_url,
-                content=body_text.encode() if body_text else None,
+                content=envelope.body_text.encode() if envelope.body_text else None,
                 headers=envelope.headers,
             )
 
-            # Send response back via WebSocket
-            response_envelope = ResponseEnvelope(
+            # Send response back via WebSocket using helper
+            await self._send_response_envelope(
                 request_id=envelope.request_id,
                 status_code=response.status_code,
                 headers=dict(response.headers),
                 body_text=response.text,
             )
-
-            await self.ws.send(json.dumps(response_envelope.model_dump()))
             print(
                 f"[{self.agent_id}] → Response {envelope.request_id}: "
                 f"Status {response.status_code}"
             )
 
         except Exception as e:
-            # Send error response
-            error_envelope = ResponseEnvelope(
+            # Send error response using helper
+            await self._send_response_envelope(
                 request_id=envelope.request_id,
                 status_code=500,
                 headers={"Content-Type": "application/json"},
                 body_text=json.dumps({"error": str(e)}),
             )
-            await self.ws.send(json.dumps(error_envelope.model_dump()))
             print(f"[{self.agent_id}] ✗ Error handling request {envelope.request_id}: {e}")
-
-    def _translate_agent_urls(self, body_text: str) -> str:
-        """
-        Translate agent references in message body to proxy URLs.
-
-        Handles both JSON format and XML-tag format.
-
-        JSON Example:
-        Input:  {"agents": {"white-1": {"agent_id": "white-1"}}}
-        Output: {"agents": {"white-1": {"agent_id": "white-1", "url": "http://localhost:9101/agents/white-1"}}}
-
-        XML Example:
-        Input:  {"agents": {"white-1": {...}}, "task": "..."}
-        Output: Formatted as XML tags with <white_agent_url>...</white_agent_url>
-        """
-        try:
-            body = json.loads(body_text)
-
-            # Special handling for green agent's tau-bench format
-            # It expects XML tags, not JSON
-            if "agents" in body and "env_config" in body:
-                # This is a tau-bench task - format with XML tags
-                agents_dict = body.get("agents", {})
-
-                # Build the text message with XML tags
-                text_parts = []
-
-                if "task" in body:
-                    text_parts.append(body["task"])
-
-                # Add agent URLs as XML tags
-                for agent_id in agents_dict.keys():
-                    proxy_url = f"http://localhost:{self.proxy_port}/agents/{agent_id}/"
-                    text_parts.append(
-                        f"<white_agent_url>\n{proxy_url}\n</white_agent_url>"
-                    )
-
-                # Add env config as XML tag
-                if "env_config" in body:
-                    env_json = json.dumps(body["env_config"], indent=2)
-                    text_parts.append(
-                        f"<env_config>\n{env_json}\n</env_config>"
-                    )
-
-                return "\n".join(text_parts)
-
-            # Standard JSON handling
-            # Pattern 1: "agents" dict with agent_id keys
-            if "agents" in body and isinstance(body["agents"], dict):
-                for agent_id, agent_info in body["agents"].items():
-                    if isinstance(agent_info, dict):
-                        # Inject proxy URL for this agent
-                        agent_info["url"] = (
-                            f"http://localhost:{self.proxy_port}/agents/{agent_id}"
-                        )
-
-            # Pattern 2: Direct target_agent_id field
-            if "target_agent_id" in body:
-                target_id = body["target_agent_id"]
-                body["target_agent_url"] = (
-                    f"http://localhost:{self.proxy_port}/agents/{target_id}"
-                )
-
-            return json.dumps(body)
-
-        except json.JSONDecodeError:
-            # Not JSON, return as-is
-            return body_text
 
     async def send_request_via_websocket(
         self, target_agent_id: str, method: str, path: str, headers: dict, body: bytes
@@ -337,11 +246,14 @@ class AgentProxy:
         self.pending_responses[request_id] = response_future
 
         # Send via WebSocket
-        await self.ws.send(json.dumps(envelope.model_dump(by_alias=True)))
-        print(
-            f"[{self.agent_id}] → Outgoing request {request_id}: "
-            f"local agent → {target_agent_id} ({method} {path})"
+        self._log_header(
+            "📤", "SENDING to server via WebSocket",
+            request_id=request_id,
+            from_to=f"{self.agent_id} → To: {target_agent_id}",
+            method_path=f"{method} {path}"
         )
+
+        await self.ws.send(json.dumps(envelope.model_dump(by_alias=True)))
 
         # Wait for response (with timeout)
         try:
@@ -441,6 +353,13 @@ def create_proxy_app(proxy: AgentProxy) -> FastAPI:
         URL pattern: /agents/{target_agent_id}/v1/message:send
         Extracts target_agent_id and forwards via WebSocket.
         """
+        proxy._log_header(
+            "🔵", "ENTRY: HTTP from local agent",
+            method=request.method,
+            target=target_agent_id,
+            path=f"/{path}"
+        )
+
         # Read request details
         body = await request.body()
         headers = dict(request.headers)
@@ -452,6 +371,11 @@ def create_proxy_app(proxy: AgentProxy) -> FastAPI:
             path=f"/{path}",
             headers=headers,
             body=body,
+        )
+
+        proxy._log_header(
+            "🟢", "EXIT: Returning to local agent",
+            status=response.status_code
         )
 
         return response

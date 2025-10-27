@@ -134,17 +134,18 @@ class TauGreenAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         # parse the task
-        print("Green agent: Received a task, parsing...")
-        print(f"Green agent: Context ID: {context.context_id}")
+        print(f"\n{'='*60}", flush=True)
+        print(f"[AGENT:green] 🟢 EXECUTING task", flush=True)
+        print(f"  Context ID: {context.context_id}", flush=True)
+        print(f"{'='*60}\n", flush=True)
+
         user_input = context.get_user_input()
-        print(f"Green agent: User input:\n{user_input}")
+        print(f"[AGENT:green] Parsing task input...")
         tags = parse_tags(user_input)
-        print(f"Green agent: Parsed tags: {list(tags.keys())}")
         white_agent_url = tags["white_agent_url"]
-        print(f"Green agent: White agent URL: {white_agent_url}")
+        print(f"[AGENT:green] Target white agent URL: {white_agent_url}")
         env_config_str = tags["env_config"]
         env_config = json.loads(env_config_str)
-        print(f"Green agent: Env config: {env_config}")
 
         # set up the environment
         # migrate from https://github.com/sierra-research/tau-bench/blob/4754e6b406507dbcbce8e8b3855dcf80aaec18ac/tau_bench/run.py#L20
