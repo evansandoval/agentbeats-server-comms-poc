@@ -15,10 +15,10 @@ import os
 start_green_agent(
     agent_name=os.environ.get('AGENT_NAME', 'tau_green_agent'),
     host=os.environ.get('AGENT_HOST', '0.0.0.0'),
-    port=int(os.environ.get('AGENT_PORT', '9001')),
+    port=int(os.environ.get('AGENT_PORT', '9000')),
     server_url=os.environ.get('SERVER_URL'),
     agent_id=os.environ.get('AGENT_ID', 'green'),
-    proxy_port=int(os.environ.get('PROXY_PORT', '9101')),
+    proxy_port=int(os.environ.get('PROXY_PORT', '9001')),
 )
 "
 elif [ "$AGENT_TYPE" = "white" ]; then
@@ -29,10 +29,10 @@ import os
 start_white_agent(
     agent_name=os.environ.get('AGENT_NAME', 'general_white_agent'),
     host=os.environ.get('AGENT_HOST', '0.0.0.0'),
-    port=int(os.environ.get('AGENT_PORT', '9002')),
+    port=int(os.environ.get('AGENT_PORT', '9000')),
     server_url=os.environ.get('SERVER_URL'),
     agent_id=os.environ.get('AGENT_ID', 'white-1'),
-    proxy_port=int(os.environ.get('PROXY_PORT', '9102')),
+    proxy_port=int(os.environ.get('PROXY_PORT', '9001')),
 )
 "
 else

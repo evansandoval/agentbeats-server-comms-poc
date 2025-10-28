@@ -33,8 +33,8 @@ services:
       - AGENT_TYPE=green
       - AGENT_NAME=tau_green_agent
       - AGENT_HOST=0.0.0.0
-      - AGENT_PORT=9001
-      - PROXY_PORT=9101
+      - AGENT_PORT=9000
+      - PROXY_PORT=9001
       - SERVER_URL=ws://server:8000
       - AGENT_ID=green
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -63,8 +63,8 @@ services:
       - AGENT_TYPE=white
       - AGENT_NAME=general_white_agent
       - AGENT_HOST=0.0.0.0
-      - AGENT_PORT=9002
-      - PROXY_PORT=9102
+      - AGENT_PORT=9000
+      - PROXY_PORT=9001
       - SERVER_URL=ws://server:8000
       - AGENT_ID=white-1
       - OPENAI_API_KEY=${OPENAI_API_KEY}

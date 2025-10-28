@@ -1,5 +1,25 @@
 # Docker Testing Guide
 
+## Architecture Overview
+
+The Docker deployment creates three isolated containers:
+- **a2a-server**: Central WebSocket router (port 8000 exposed to host)
+- **a2a-green-agent**: Green agent + proxy (ports 9000/9001 internal only)
+- **a2a-white-agent**: White agent + proxy (ports 9000/9001 internal only)
+
+**Key Design**: All agents use standardized ports (agent: 9000, proxy: 9001) because each container has its own isolated `localhost`. Agent ports are NOT exposed to the host, ensuring all communication flows through the server's WebSocket connections.
+
+## How Evaluation Works
+
+The system is **reactive**, not proactive:
+
+1. **Startup**: All containers start and agents register with the server, but no evaluation runs
+2. **Task Trigger**: You send a POST request to `http://localhost:8000/tasks/send` with task configuration
+3. **Server Routes**: Server sends `start_task` message to green agent's proxy via WebSocket
+4. **Proxy Converts**: Green proxy uses A2A client to POST the task to green agent's HTTP endpoint
+5. **Evaluation Begins**: Green agent's `TauGreenAgentExecutor.execute()` method runs
+6. **Inter-Agent Communication**: Green agent sends messages to white agent via proxy URLs, all routed through server
+
 ## Prerequisites
 
 1. Docker installed and running
@@ -183,17 +203,19 @@ docker-compose exec green-agent env | grep OPENAI
 
 ### Issue: Port conflicts
 
-If ports 8000, 9001, 9002, 9101, or 9102 are already in use:
+If port 8000 is already in use on the host:
 
 ```bash
-# Check what's using the ports
+# Check what's using port 8000
 lsof -i :8000
-lsof -i :9001
 
 # Option 1: Stop conflicting services
-# Option 2: Modify docker-compose.yml to use different host ports
-# Example: "8001:8000" maps host port 8001 to container port 8000
+# Option 2: Modify docker-compose.yml to use different host port
+# Example: Change "8000:8000" to "8001:8000" in server's ports section
+# This maps host port 8001 to container port 8000
 ```
+
+**Note**: Agent and proxy ports (9000, 9001) are NOT exposed to the host in the Docker deployment, so there's no risk of port conflicts for them. All agents use the same internal ports since each container has isolated localhost.
 
 ### Issue: Build failures
 
@@ -222,6 +244,28 @@ docker-compose up
 - Subsequent builds: 1-2 minutes (using cache)
 - Startup time: ~10-15 seconds for all services to be healthy
 - Agent registration: ~2-3 seconds after startup
+
+## Known Issues
+
+### LLM Output Format Errors
+
+**Symptom**: Evaluation crashes mid-run with `KeyError: 'json'`
+
+**Cause**: White agent (powered by LLM) sometimes returns responses without proper `<json>...</json>` tags due to nondeterministic LLM output formatting.
+
+**Workaround**: Restart the evaluation. The LLM usually formats correctly on subsequent attempts.
+
+**Status**: Fix planned - will add error handling, fallback JSON extraction, and retry logic. See README.md "Known Issues and TODOs" section for details.
+
+### Docker Build Cache
+
+**Symptom**: Code changes don't appear in running containers
+
+**Cause**: Docker caches layers, including the Python code copy step
+
+**Solution**: Use `docker-compose build --no-cache` to force a clean rebuild
+
+**Tip**: If you're only changing Python code, the cached build is usually fine since the code is installed with `pip install -e .` (editable mode). Only use `--no-cache` if you're certain the cache is stale.
 
 ## Next Steps
 

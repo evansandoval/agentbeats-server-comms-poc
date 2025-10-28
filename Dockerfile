@@ -43,18 +43,19 @@ CMD ["python", "-m", "uvicorn", "src.server.server:app", "--host", "0.0.0.0", "-
 # ==============================================================================
 FROM base AS agent
 
-# Agents will use different ports and configurations via environment variables
+# Agents will use standardized ports across all containers
+# Since each container has isolated localhost, all agents can use same ports
 # Default values (can be overridden in docker-compose.yml):
 ENV AGENT_TYPE=green
 ENV AGENT_NAME=tau_green_agent
 ENV AGENT_HOST=0.0.0.0
-ENV AGENT_PORT=9001
-ENV PROXY_PORT=9101
+ENV AGENT_PORT=9000
+ENV PROXY_PORT=9001
 ENV SERVER_URL=ws://server:8000
 ENV AGENT_ID=green
 
-# Expose agent and proxy ports (will be overridden by docker-compose for white agent)
-EXPOSE 9001 9101
+# Expose standardized agent and proxy ports
+EXPOSE 9000 9001
 
 # No health check for agents - they don't expose /health endpoint
 # The server's health check verifies agent registration via WebSocket

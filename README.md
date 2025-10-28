@@ -16,16 +16,18 @@ This project implements a distributed agent communication system where agents co
 ```
 ┌─────────────────┐       ┌──────────────┐       ┌─────────────────┐
 │ Green Agent     │ HTTP  │ Green Proxy  │  WS   │ Central Server  │
-│ (localhost:9001)│<─────>│(localhost:9101)│<────>│ (localhost:8000)│
+│ (localhost:9000)│<─────>│(localhost:9001)│<────>│ (localhost:8000)│
 └─────────────────┘       └──────────────┘       └─────────────────┘
                                                           │
                                                           │ WS
                                                           ▼
 ┌─────────────────┐       ┌──────────────┐       ┌─────────────────┐
 │ White Agent     │ HTTP  │ White Proxy  │  WS   │                 │
-│ (localhost:9002)│<─────>│(localhost:9102)│<────>│                 │
+│ (localhost:9000)│<─────>│(localhost:9001)│<────>│                 │
 └─────────────────┘       └──────────────┘       └─────────────────┘
 ```
+
+**Note**: In Docker/distributed deployments, all agents use standardized ports (agent: 9000, proxy: 9001) since each container has its own isolated localhost namespace.
 
 ### Key Design Principle
 
@@ -50,10 +52,12 @@ echo "OPENAI_API_KEY=your_key_here" > .env
 docker-compose up --build
 ```
 
-This starts:
-1. Central WebSocket server on `localhost:8000`
-2. Green agent + proxy (agent: `localhost:9001`, proxy: `localhost:9101`)
-3. White agent + proxy (agent: `localhost:9002`, proxy: `localhost:9102`)
+This starts three containers:
+1. **a2a-server**: Central WebSocket server (exposed on `localhost:8000`)
+2. **a2a-green-agent**: Green agent + proxy (internal ports 9000/9001, not exposed)
+3. **a2a-white-agent**: White agent + proxy (internal ports 9000/9001, not exposed)
+
+All inter-agent communication must go through the server - agent ports are not exposed to the host.
 
 ### Option 2: Local Development
 
@@ -203,8 +207,8 @@ All WebSocket messages use Pydantic schemas defined in `src/proxy/messages.py`:
    - Spawns proxy subprocess
    - Proxy connects to server via WebSocket
    - Proxy sends `{"type": "register", "agent_id": "green"}`
-   - Agent starts HTTP server on `localhost:9001`
-   - Proxy starts HTTP server on `localhost:9101`
+   - Agent starts HTTP server on `localhost:9000`
+   - Proxy starts HTTP server on `localhost:9001`
 3. **White agent starts**: Same pattern as green
 4. **Server state**: `agents = {"green": <ws1>, "white-1": <ws2>}`
 
@@ -226,7 +230,7 @@ All WebSocket messages use Pydantic schemas defined in `src/proxy/messages.py`:
      """
      Your task is to instantiate tau-bench...
      <white_agent_url>
-     http://localhost:9101/agents/white-1/
+     http://localhost:9001/agents/white-1/
      </white_agent_url>
      <env_config>
      {...}
@@ -237,14 +241,14 @@ All WebSocket messages use Pydantic schemas defined in `src/proxy/messages.py`:
 3. Green Agent:
    - Receives proper A2A message
    - Parses XML tags
-   - Extracts white_agent_url: "http://localhost:9101/agents/white-1/"
+   - Extracts white_agent_url: "http://localhost:9001/agents/white-1/"
 ```
 
 ### Inter-Agent Communication
 
 ```
 1. Green Agent calls:
-   my_a2a.send_message("http://localhost:9101/agents/white-1/", message)
+   my_a2a.send_message("http://localhost:9001/agents/white-1/", message)
 
 2. Green Proxy receives HTTP:
    POST /agents/white-1/v1/message:send
@@ -257,7 +261,7 @@ All WebSocket messages use Pydantic schemas defined in `src/proxy/messages.py`:
    - Forwards to white-1's WebSocket
 
 4. White Proxy receives RequestEnvelope:
-   - Uses httpx with raw_path to forward to localhost:9002/v1/message:send
+   - Uses httpx with raw_path to forward to localhost:9000/v1/message:send
    - Avoids URL encoding the colon
 
 5. White Agent processes:
@@ -301,7 +305,7 @@ from src.green_agent import start_green_agent
 start_green_agent(
     server_url="ws://localhost:8000",
     agent_id="green",
-    proxy_port=9101
+    proxy_port=9001
 )
 ```
 
@@ -311,7 +315,7 @@ from src.white_agent import start_white_agent
 start_white_agent(
     server_url="ws://localhost:8000",
     agent_id="white-1",
-    proxy_port=9102
+    proxy_port=9001
 )
 ```
 
@@ -383,11 +387,11 @@ The proxy architecture allows agents to be deployed in separate containers while
 - **Proxy process**: WebSocket adapter (auto-started by agent)
 
 The `docker-compose.yml` orchestrates:
-- **server**: WebSocket router (port 8000)
-- **green-agent**: Assessment manager + proxy (ports 9001, 9101)
-- **white-agent**: Target agent + proxy (ports 9002, 9102)
+- **server**: WebSocket router (exposed port 8000)
+- **green-agent**: Assessment manager + proxy (internal ports 9000, 9001 - not exposed)
+- **white-agent**: Target agent + proxy (internal ports 9000, 9001 - not exposed)
 
-All containers communicate via Docker bridge network using service names (e.g., `ws://server:8000`).
+All containers use standardized ports (agent: 9000, proxy: 9001) since each has isolated localhost. Containers communicate via Docker bridge network using service names (e.g., `ws://server:8000`). Agent ports are NOT exposed to the host to ensure all communication flows through the server.
 
 ### Testing
 
@@ -420,9 +424,9 @@ Returns:
 
 3. **Server-initiated tasks**: Server sends `start_task` message with simple task config, proxy handles A2A conversion and URL translation
 
-4. **URL-based routing**: `/agents/{agent_id}/*` pattern enables deterministic addressing - green agent can call `http://localhost:9101/agents/white-1/v1/message:send` without knowing white's actual location
+4. **URL-based routing**: `/agents/{agent_id}/*` pattern enables deterministic addressing - green agent can call `http://localhost:9001/agents/white-1/v1/message:send` without knowing white's actual location
 
-5. **Proxy URL injection**: Server sends agent IDs in task config, proxy translates to local proxy URLs (e.g., `white-1` → `http://localhost:9101/agents/white-1/`)
+5. **Proxy URL injection**: Server sends agent IDs in task config, proxy translates to local proxy URLs (e.g., `white-1` → `http://localhost:9001/agents/white-1/`)
 
 6. **Self-starting proxies**: Agents spawn their own proxy subprocess for deployment simplicity - one container = agent + proxy
 
@@ -447,7 +451,7 @@ This codebase demonstrates the architecture with Tau-Bench, a standardized agent
 
 1. **Server** sends task to **Green Agent** (assessment manager)
 2. **Green** parses task, extracts **White Agent** URL from XML tags
-3. **Green** calls White via proxy: `POST http://localhost:9101/agents/white-1/v1/message:send`
+3. **Green** calls White via proxy: `POST http://localhost:9001/agents/white-1/v1/message:send`
 4. **Green's proxy** wraps request in WebSocket envelope, sends to server
 5. **Server** routes to White's proxy via WebSocket
 6. **White's proxy** forwards to local White agent via HTTP
@@ -455,6 +459,44 @@ This codebase demonstrates the architecture with Tau-Bench, a standardized agent
 8. Response flows back through: White's proxy → Server → Green's proxy → Green agent
 
 The entire flow is transparent to both agents - they just use standard A2A HTTP calls.
+
+## Known Issues and TODOs
+
+### Medium Priority
+
+1. **Dynamic Service Discovery**
+   - **Current State**: All URLs hardcoded (agent ports, proxy ports, server URL)
+   - **Limitation**: Cannot scale dynamically or deploy to cloud without reconfiguration
+   - **Future Enhancement**:
+     - Implement service registry for agent discovery
+     - Support dynamic port allocation
+     - Enable Kubernetes/cloud-native deployment patterns
+     - Consider DNS-based service discovery or service mesh integration
+
+2. **Multi-Agent Scaling**
+   - **Current State**: One green agent, one white agent, static topology
+   - **Future Enhancement**:
+     - Support multiple white agents with load balancing
+     - Implement agent pools for horizontal scaling
+     - Add routing strategies (round-robin, least-loaded, etc.)
+
+### Low Priority
+
+3. **Health Check Improvements**
+   - Add agent-level health endpoints (currently only server has `/health`)
+   - Implement heartbeat mechanism for detecting stale connections
+   - Add metrics/monitoring endpoints (Prometheus, etc.)
+
+4. **Security Enhancements**
+   - Add authentication for WebSocket connections
+   - Implement message signing/verification
+   - Add rate limiting and abuse prevention
+   - Support TLS/WSS for production deployments
+
+5. **Message Persistence**
+   - Add optional message logging/replay capability
+   - Implement message queue integration (RabbitMQ, Redis, etc.)
+   - Support async/fire-and-forget message patterns
 
 ## License
 
