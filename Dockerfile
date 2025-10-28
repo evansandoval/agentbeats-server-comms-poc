@@ -56,9 +56,9 @@ ENV AGENT_ID=green
 # Expose agent and proxy ports (will be overridden by docker-compose for white agent)
 EXPOSE 9001 9101
 
-# Health check using the agent's HTTP endpoint
-HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${AGENT_PORT}/health || exit 1
+# No health check for agents - they don't expose /health endpoint
+# The server's health check verifies agent registration via WebSocket
+HEALTHCHECK NONE
 
 # Entry point script that routes to appropriate agent
 COPY docker-entrypoint.sh /docker-entrypoint.sh

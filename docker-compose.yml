@@ -4,7 +4,7 @@ services:
     build:
       context: .
       target: server
-    container_name: a2a-proxy-server
+    container_name: a2a-server
     ports:
       - "8000:8000"
     networks:
@@ -16,6 +16,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Green agent (assessment manager) + proxy
   green-agent:
@@ -41,6 +46,11 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # White agent (target being tested) + proxy
   white-agent:
@@ -66,6 +76,11 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   a2a-network:

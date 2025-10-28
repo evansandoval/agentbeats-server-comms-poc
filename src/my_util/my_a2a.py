@@ -49,6 +49,11 @@ async def send_message(
 ) -> SendMessageResponse:
     card = await get_agent_card(url)
     httpx_client = httpx.AsyncClient(timeout=120.0)
+    # IMPORTANT: Override the agent card URL with the proxy URL we're actually using
+    # The card contains the agent's internal URL, but we need to use the proxy URL
+    print("AGENT CARD URL FROM GET AGENT CARD", card.url)
+    print("OVERWRITING TO", url)
+    card.url = url
     client = A2AClient(httpx_client=httpx_client, agent_card=card)
 
     message_id = uuid.uuid4().hex
